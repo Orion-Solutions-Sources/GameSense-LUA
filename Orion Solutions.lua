@@ -5,17 +5,18 @@ local adata = require "gamesense/antiaim_funcs"
 local images = require "gamesense/images"
 local vector = require "vector"
 
-local data = database.read("SURGEDATA") or {}
+local data = database.read("ORION_DATA") or {}
 
+if data.KillCount == nil then data.KillCount = 0 end
+if data.Coins == nil then data.Coins = 0 end
 
-if data.kill_count == nil then data.kill_count = 0 end
-if data.coins == nil then data.coins = 0 end
-
-local globals = {
+local Globals = {
 	screen_x, screen_y,
+	UserName,
 }
 
-globals.screen_x, globals.screen_y = client.screen_size()
+Globals.screen_x, Globals.screen_y = client.screen_size()
+Globals.UserName = entity.get_player_name(entity.get_local_player())
 local refs = {
 	rage = {
 		aimbot = {
@@ -101,7 +102,6 @@ local color do
 
 	create = ffi.metatype(ffi.typeof("struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; }"), mt)
 
-
     color = setmetatable({
         rgb = a(function (r,g,b,a)
             r = math.min(r or 255, 255)
@@ -119,15 +119,14 @@ local color do
 end
 
 local colors = {
-	hex		= "\a7676FFFF",
-	--accent	= color.hex("74A6A9"),
-	--back	= color.rgb(23, 26, 28),
-	--dark	= color.rgb(5, 6, 8),
-	--white	= color.rgb(255),
-	--black	= color.rgb(0),
-	--null	= color.rgb(0, 0, 0, 0),
-	--text	= color.rgb(230),
-
+	hex		= "\aC04D9A",
+	accent	= color.hex("C04D9A"),
+	back	= color.rgb(23, 26, 28),
+	dark	= color.rgb(5, 6, 8),
+	white	= color.rgb(255),
+	black	= color.rgb(0),
+	null	= color.rgb(0, 0, 0, 0),
+	text	= color.rgb(230),
 }
 
 local printc do
@@ -145,14 +144,24 @@ local printc do
 end
 
 local GUI = {
-	space = function(group) group:label("\n") end,
-	header = function(name, group) 
+	Header = function(name, group) 
 		r = {}
 		r[#r+1] = group:label("\f<c> "..name)
 		r[#r+1] = group:label("\f<silent>‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾") 
 		return r
-	end
+	end,
+	Feature = function (main, settings)
+	    main = main.__type == "pui::element" and {main} or main
+		local feature, g_depend = settings(main[1])
 
+	    for k, v in pairs(feature) do
+			v:depend({main[1], g_depend})
+		end
+		feature[main.key or "on"] = main[1]
+
+		return feature
+	end,
+	Space = function(group) group:label("\n") end,
 }
 
 local groups = {
@@ -166,96 +175,114 @@ local groups = {
 pui.macros.silent = "\aCDCDCD40"
 pui.macros.p = "\aCDCDCD40•\r"
 pui.macros.c = "\v•\r" 
-pui.macros.surge = colors.hex
+pui.macros.orion = colors.hex
 --118, 118, 255, 255
 
-local ui = {
-    global = groups.fakelag:label("\f<silent>---------------\vSurge\f<silent>---------------"),
-    tab = groups.fakelag:combobox("\n", "Config","Main","AntiAim"),
-	--test = groups.fakelag:color_picker("s", 118, 118, 255, 255),
+local ConditionName = ""
+local UI = {
+	GUI.Header("Orion Solutions", groups.fakelag),
+	Tabs = groups.fakelag:combobox("\n", "Home", "Rage", "Anti-Aim", "Visuals", "Miscellaneous"),
 
-	GUI.header("Info" , groups.fakelag),
-	groups.fakelag:label("\f<silent>User: \vJaylon"),
-	groups.fakelag:label("\f<silent>Build: \vDebug"),
-	GUI.header("Stats" , groups.fakelag),
-	killcounter = groups.fakelag:label("\f<silent>Kills: \v" .. data.kill_count),
-	coincounter = groups.fakelag:label("\f<silent>Coins: \v" .. data.coins),
-	rage = {
-		GUI.header("Rage" , groups.angles),
-		--headhelper = groups.angles:checkbox("HeadHelper(\aFF3232B3beta\r)"),
-		groups.angles:label("\f<silent>Nothing here yet"),
+	Home = {
+		GUI.Header("Info", groups.fakelag),
+		groups.fakelag:label("\f<silent>User: \v"..Globals.UserName),
+        groups.fakelag:label("\f<silent>Build: \vDebug"),
 
+		Statistics = {
+		   GUI.Header("Statistics", groups.other),
+		   KillCounter = groups.other:label("\f<silent>Kills: \v" .. data.KillCount),
+		   CoinCounter = groups.other:label("\f<silent>Coins: \v" .. data.Coins),
+		},
 	},
 
-	visuals = {
+	Rage = {
+		GUI.Header("Rage", groups.angles),
+		Resolver = GUI.Feature({groups.angles:checkbox("Resolver")}, function(Parent)
+			return {
+				Mode = groups.angles:combobox("\n Resolver Mode", "Normal", "Bruteforce"),
+			}, true
+		end),
+	},
 	
-		GUI.header("Visuals" , groups.angles),
-		watermark = groups.angles:checkbox("Watermark", true, true),
-		
-
-
-		
-	},
-	misc = {
-		GUI.header("Misc" , groups.angles),
-		antibackstab = groups.angles:checkbox("Anti Backstab", true),
-		antibackstabdist = groups.angles:slider("Distance ", 0, 500, 160),
-
+	AntiAim = {
+		GUI.Header("AntiAim", groups.angles),
+		Type = groups.angles:combobox("Type", "GameSense", "Orion(Nothing's here)"),
+		Condition = groups.angles:combobox("Condtion", "Global", "Stand", "Walk/Run", "Air", "Duck", "AirDuck", "Sneak"),
 
 	},
-	--timecounter = groups.fakelag:label("\f<silent>Time: \v" .. data.time)
+
+	Visuals = {
+		GUI.Header("Visuals", groups.angles),
+
+		WaterMark = groups.angles:checkbox("WaterMark", true, true)
+	},
+
+	Miscellaneous = {
+		GUI.Header("Miscellaneous" , groups.angles),
+        AntiBackStab = groups.angles:checkbox("Anti Backstab", true),
+        AntiBackStabDistance = groups.angles:slider("Distance ", 0, 500, 160),
+		
+		
+	},
+
+	ConfigSystem = {
+
+	}
 }
 
-
-
-
 local function Menu() 
-	refs.aa.angles.enable:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.pitch[1]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.pitch[2]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.base:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.yaw[1]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.yaw[2]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.jitter[1]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.jitter[2]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.body[1]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.body[2]:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.edge:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.fs_body:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.freestand:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.freestand.hotkey:depend({ui.tab, "AntiAim"})
-	refs.aa.angles.roll:depend({ui.tab, "AntiAim"})
+	refs.aa.angles.enable:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.pitch[1]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.pitch[2]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.base:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.yaw[1]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.yaw[2]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.jitter[1]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.jitter[2]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.body[1]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.body[2]:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.edge:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.fs_body:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.freestand:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.freestand.hotkey:depend({UI.Tabs, "AntiAim"})
+	refs.aa.angles.roll:depend({UI.Tabs, "AntiAim"})
 
+	refs.aa.other.slowmo:depend({UI.Tabs, "AntiAim"})
+	refs.aa.other.slowmo.hotkey:depend({UI.Tabs, "AntiAim"})
+	refs.aa.other.legs:depend({UI.Tabs, "AntiAim"})
+	refs.aa.other.onshot:depend({UI.Tabs, "AntiAim"})
+	refs.aa.other.onshot.hotkey:depend({UI.Tabs, "AntiAim"})
+	refs.aa.other.fp:depend({UI.Tabs, "AntiAim"})
+	refs.aa.other.fp.hotkey:depend({UI.Tabs, "AntiAim"})
 
+	refs.aa.fakelag.enable:depend({UI.Tabs, "yg"})
+	refs.aa.fakelag.enable.hotkey:depend({UI.Tabs, "yg"})
+	refs.aa.fakelag.variance:depend({UI.Tabs, "yg"})
+	refs.aa.fakelag.amount:depend({UI.Tabs, "yg"})
+	refs.aa.fakelag.limit:depend({UI.Tabs, "yg"})
 
-	refs.aa.fakelag.enable:depend({ui.tab, "yg"})
-	refs.aa.fakelag.enable.hotkey:depend({ui.tab, "yg"})
-	refs.aa.fakelag.variance:depend({ui.tab, "yg"})
-	refs.aa.fakelag.amount:depend({ui.tab, "yg"})
-	refs.aa.fakelag.limit:depend({ui.tab, "yg"})
-
-
-
-	
-	pui.traverse(ui.rage, function (ref, path)
-		ref:depend({ui.tab, "Main"})
-	end)	
-
-	pui.traverse(ui.visuals, function (ref, path)
-		ref:depend({ui.tab, "Main"})
+	pui.traverse(UI.Home.Statistics, function(ref, path)
+		ref:depend({UI.Tabs, "Home"})
 	end)
 
-	pui.traverse(ui.misc, function (ref, path)
-		ref:depend({ui.tab, "Main"})
+	pui.traverse(UI.Rage, function (ref, path)
+		ref:depend({UI.Tabs, "Rage"})
+	end)
+	
+	pui.traverse(UI.AntiAim, function(ref,path)
+		ref:depend({UI.Tabs, "Anti-Aim"})
+	end)
+
+	pui.traverse(UI.Visuals, function (ref, path)
+		ref:depend({UI.Tabs, "Visuals"})
+	end)
+
+	pui.traverse(UI.Miscellaneous, function (ref, path)
+		ref:depend({UI.Tabs, "Miscellaneous"})
 	end)		
 
-	ui.misc.antibackstabdist:depend({ui.misc.antibackstab, true})
-
-
-
-
+	UI.Miscellaneous.AntiBackStabDistance:depend({UI.Miscellaneous.AntiBackStab, true})
 end
-
 
 Menu()
 
@@ -263,7 +290,7 @@ local render = {
 
 	rectangle = function (x, y, w, h, n, r, g, b, a)
 		x, y, w, h, n = x, y, w, h, n or 0
-
+		
 		if n == 0 then
 			renderer.rectangle(x, y, w, h, r, g, b, a)
 		else
@@ -281,19 +308,14 @@ local render = {
 		renderer.circle(x + n, y + n, r, g, b, a, n, 180, 0.25)
 		renderer.rectangle(x + n, y, w - n - n, n, r, g, b, a)
 		renderer.circle(x + w - n, y + n, r, g, b, a, n, 90, 0.25)
-
 	end
-
 }
 
-
-
-
-local function WaterMark()
-	if not ui.visuals.watermark:get() then return end
+WaterMark = function()
+	if not UI.Visuals.WaterMark:get() then return end
 	--images.image_draw(100, 100, 25, 25)
-	local text_width, text_height = renderer.measure_text(nil, "Surge •\v" .." Jaylon •\v".. " Debug")
-	left = globals.screen_x - text_width - 25
+	local text_width, text_height = renderer.measure_text(nil, "Orion Solutions •\v" .. " " .. Globals.UserName .." •\v".. " Debug")
+	left = Globals.screen_x - text_width - 25
 
 	local Player = entity.get_local_player()
     local SteamID3 = entity.get_steam64(Player)
@@ -303,32 +325,83 @@ local function WaterMark()
 	render.rectangle(left - 33, 9, text_width + 12 + 17, 22, 5, 118, 118, 255, 255)
 	render.rectangle(left - 32, 10, text_width + 10 + 17, 20, 5, 23, 23, 23, 255)
 	--other text set up --redo this plez its ass and needs to be done right!!
-	renderer.text(left - 10, 10 + text_height/4, 255, 255, 255, 255, nil, 200, "Surge •")
-	parttext_width, parttext_height = renderer.measure_text(nil, "Surge •")
-	renderer.text(left - 10 + parttext_width, 10 + text_height/4, 118, 118, 255, 255, nil, 200, " Jaylon")
+	renderer.text(left - 10, 10 + text_height/4, 255, 255, 255, 255, nil, 200, "Orion Solutions •")
+	parttext_width, parttext_height = renderer.measure_text(nil, "Orion Solutions •")
+	renderer.text(left - 10 + parttext_width, 10 + text_height/4, 118, 118, 255, 255, nil, 200, " " .. Globals.UserName)
 	prevlocation = left - 10 + parttext_width
-	parttext_width, parttext_height = renderer.measure_text(nil, " Jaylon")
+	parttext_width, parttext_height = renderer.measure_text(nil, " " .. Globals.UserName)
 	renderer.text(prevlocation + parttext_width, 10 + text_height/4, 255, 255, 255, 255, nil, 200, " • ")
 	prevlocation = prevlocation + parttext_width
 	parttext_width, parttext_height = renderer.measure_text(nil, " • ")
 	renderer.text(prevlocation + parttext_width, 10 + text_height/4, 118, 118, 255, 255, nil, 200, "Debug")
 
-
 	Avatar:draw(left - 28, 13 , 14.5, 15)
 	renderer.circle_outline(left - 28 + 7.9, 12 + 8, 23, 23, 23, 255, 10, 0, 1, 3)
-
-
 end
 
-local function AntiBackStab()
+local States = {
+	"Stand",
+	"Running",
+	"Air",
+	"Duck",
+	"AirDuck",
+	"Sneak"
+}
 
-	if not ui.misc.antibackstab:get() then return end
+local my = {
+	entity = entity.get_local_player(),
+	valid,
+	State,
+	velocity,
+}
 
+my_setup = function(cmd)
+	my.entity = entity.get_local_player()
+	my.valid = (my.entity ~= nil ) and entity.is_alive(my.entity)
+	local velocity = vector(entity.get_prop(my.entity, "m_vecVelocity"))
+	my.velocity = velocity:length2d()
+
+	if my.valid then
+		local flags = entity.get_prop(my.entity, "m_fFlags")
+		local grounded = bit.band(flags, bit.lshift(1, 0)) == 1
+		
+		if grounded or not cmd.in_jump == 1 then
+			if (cmd.in_duck == 1) then
+				my.state = 4 
+			else
+
+				if (my.velocity > 5) or (cmd.in_speed == 1) then
+				
+					if refs.aa.other.slowmo.hotkey:get() then
+						my.state = 6
+					else
+						my.state = 2
+					end
+				else
+					my.state = 1
+				end
+			end
+		else
+			if (cmd.in_duck == 1) then
+				my.state = 5 
+			else
+				my.state = 3
+
+			end
+		end
+	end
+end
+
+local function AntiAim()
+	--print(States[my.state])
+end
+
+AntiBackStab = function()
+	if not UI.Miscellaneous.AntiBackStab:get() then return end
 
 	local lp = entity.get_local_player()
 	if not lp then return end
 	local lppos = vector(entity.get_origin(lp))
-
 
 	local target = client.current_threat()
 	if not target then return end
@@ -337,44 +410,34 @@ local function AntiBackStab()
 	dist = lppos:dist(tpos)
 
 	local weapon = entity.get_player_weapon(target)
-	if dist <= ui.misc.antibackstabdist.value and entity.get_classname(weapon) == "CKnife" then
+	if dist <= UI.Miscellaneous.AntiBackStabDistance.value and entity.get_classname(weapon) == "CKnife" then
 		refs.aa.angles.yaw[2]:override(180)
 	else
 		refs.aa.angles.yaw[2]:override(0)
-
 	end
-	
-
-
 end
 
 local hitgroup_names = {'generic', 'head', 'chest', 'stomach', 'left arm', 'right arm', 'left leg', 'right leg', 'neck', '?', 'gear'}
 
 client.set_event_callback('aim_hit', function(e)
-
 	local group = hitgroup_names[e.hitgroup + 1] or '?'
 	print(string.format('Hit %s in the %s for %d damage (%d health remaining)', entity.get_player_name(e.target), group, e.damage, entity.get_prop(e.target, 'm_iHealth')))
-
 end)
 
 
 client.set_event_callback('aim_miss', function(e)
-
 	local group = hitgroup_names[e.hitgroup + 1] or '?'
 	print(string.format('Missed %s (%s) due to %s', entity.get_player_name(e.target), group, e.reason))
-
 end)
 
 
 client.set_event_callback("player_death", function(e)
 	if client.userid_to_entindex(e.attacker) == entity.get_local_player() then
-		data.kill_count = (data.kill_count or 0) + 1
-		data.coins = (data.coins or 0) + 1
+		data.KillCount = (data.KillCount or 0) + 1
+		data.Coins = (data.Coins or 0) + 1
 		if e.headshot then
-			data.coins = (data.coins or 0) + 1
-
+			data.Coins = (data.Coins or 0) + 1
 		end
-		
 	end
 end)
 local shooterid = 0 
@@ -383,7 +446,6 @@ client.set_event_callback("weapon_fire", function(e)
 	if client.userid_to_entindex(e.userid) ~= entity.get_local_player() and entity.is_enemy(client.userid_to_entindex(e.userid)) then
 		shooter = client.userid_to_entindex(e.userid)
 		shooterid = shooter
-
 	end
 end)
 
@@ -403,29 +465,25 @@ client.set_event_callback("bullet_impact", function(e)
 		enemy_view = vector(entity.get_origin(shooterid))
 		enemy_view.z = enemy_view.z + 64
 		-- closest_ray_point(head,enemy_view,impact)
-
 	end
 end)
 
 client.set_event_callback("paint", function()
-	globals.kills = data.kill_count
-	ui.killcounter:set("\f<silent>Kills: \v" .. data.kill_count)
-	ui.coincounter:set("\f<silent>Coins: \v" .. data.coins)
-
+	Globals.kills = data.KillCount
+	UI.Home.Statistics.KillCounter:set("\f<silent>Kills: \v" .. data.KillCount)
+	UI.Home.Statistics.CoinCounter:set("\f<silent>Coins: \v" .. data.Coins)
 	
 	WaterMark()
-
+	
 
 end)
 
 client.set_event_callback('setup_command', function(e)
-
 	AntiBackStab()
-
+	my_setup(e)
+	AntiAim()
 end)
 
 client.set_event_callback("shutdown", function()
-	database.write("SURGEDATA", data)
+	database.write("ORION_DATA", data)
 end)
-
-
