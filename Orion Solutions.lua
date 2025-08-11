@@ -1348,7 +1348,7 @@ client.set_event_callback('aim_miss', function(e)
     local group = hitgroup_names[e.hitgroup + 1] or '?'
     local method = p_data.last_resolving_method or "unknown"
     
-    local detailed_reason = analyze_miss_reason(e)
+    local detailed_reason = AnalyzeMissReason(e)
     
     p_data.shots_missed = p_data.shots_missed + 1
     p_data.shots_fired = p_data.shots_fired + 1
