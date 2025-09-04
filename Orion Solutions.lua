@@ -92,20 +92,16 @@ local FirebaseDB = {
     end
 }
 
-local Time = {}
+local Time = {
+    UnixTime = function()
+        return client.unix_time()
+    end,
 
-Time.UnixTime = function()
-    return client.unix_time()
-end
-
-Time.RealTime = function()
-    local hours, minutes = client.system_time()
-    return string.format("%02d:%02d", hours, minutes)
-end
-
-Time.Now = function()
-    return Time.UnixTime()
-end
+    RealTime = function()
+        local hours, minutes = client.system_time()
+        return string.format("%02d:%02d", hours, minutes)
+    end
+}
 
 local References = {
 	Rage = {
@@ -1360,7 +1356,7 @@ SaveCredentials = function(username, password)
     local credentials = {
         username = username,
         password = password,
-        timestamp = Time.Now()
+        timestamp = Time.UnixTime()
     }
     database.write("orion_credentials", json.stringify(credentials))
 end
@@ -1427,8 +1423,7 @@ local function updateOnlineStatus()
     end)
 end
 
--- Simplified function to get online users count
--- Fixed function to get online users count
+-- Function to get online users count using last_active
 local function getOnlineUsersCount(callback)
     FirebaseDB.read(DB_PATHS.ONLINE_USERS, function(success, users)
         if not success or not users or users == json.null then
@@ -1438,38 +1433,15 @@ local function getOnlineUsersCount(callback)
         
         local count = 0
         local current_time = Time.UnixTime()
-        local users_to_remove = {}
         
-        -- Handle response types
-        if type(users) == "userdata" then
-            local users_str = tostring(users)
-            if users_str ~= "null" then
-                local ok, parsed = pcall(json.parse, users_str)
-                if ok and parsed then users = parsed end
-            else
-                users = {}
-            end
-        elseif type(users) == "string" then
-            local ok, parsed = pcall(json.parse, users)
-            if ok then users = parsed else users = {} end
-        end
-        
-        -- Check each user and count/remove accordingly
+        -- Check each user and count active ones (within last 2 minutes)
         for user_id, user_data in pairs(users) do
             if user_data and type(user_data) == "table" and user_data.last_active then
                 local time_diff = current_time - user_data.last_active
-                
                 if time_diff <= 120 then  -- 2 minutes = active
                     count = count + 1
-                elseif time_diff > 600 then  -- 10+ minutes = remove
-                    users_to_remove[user_id] = json.null
                 end
             end
-        end
-        
-        -- Remove inactive users
-        if next(users_to_remove) then
-            FirebaseDB.update(DB_PATHS.ONLINE_USERS, users_to_remove, function() end)
         end
         
         callback(count)
@@ -1530,7 +1502,7 @@ Login = function(username, password, remember)
         local online_update = {
             [userid_str] = {
                 username = username,
-                last_active = Time.Now(),
+                last_active = Time.UnixTime(),
                 login_time = Time.RealTime(),
                 is_admin = user.is_admin or false,
                 version = user.version or "Live",
@@ -2037,13 +2009,7 @@ client.set_event_callback("shutdown", function()
             [UserIdString] = json.null
         }
 
-        FirebaseDB.update(DB_PATHS.ONLINE_USERS, RemoveData, function(success, error)
-            if success then
-                print("[Orion] Removed From Online Users")
-            else
-                print("[Orion] Failed to remove from online users: " .. (error or "unknown"))
-            end
-        end)
+        FirebaseDB.update(DB_PATHS.ONLINE_USERS, RemoveData, function(success, error) end)
     end
 end)
 
@@ -2069,67 +2035,6 @@ client.delay_call(0, function()
             end)
         end
     end
-end)
-
--- Add this function to create a default admin invite code
-local function createDefaultAdminInvite()
-    local invite_code = "ADMIN001"  -- You can make this dynamic if needed
-    local created_by = "System"
-    local version = "Debug"
-    
-    -- Check if the invite already exists
-    FirebaseDB.read(DB_PATHS.INVITES .. "/" .. invite_code, function(success, invite)
-        if success and (invite == nil or invite == json.null) then
-            -- Invite doesn't exist, create it
-            local invite_data = {
-                code = invite_code,
-                createdAt = "04/09/2025",
-                createdBy = created_by,
-                isActive = true,
-                isAdmin = true,
-                maxUses = 1,
-                usedCount = 0,
-                version = version
-            }
-            
-            FirebaseDB.update(DB_PATHS.INVITES, {[invite_code] = invite_data}, function(create_success, create_err)
-                if create_success then
-                    client.log("[Orion] Default admin invite created: " .. invite_code)
-                else
-                    client.log("[Orion] Failed to create default admin invite: " .. (create_err or "unknown"))
-                end
-            end)
-        elseif success and invite then
-            -- Invite exists, ensure it has admin privileges
-            FirebaseDB.update(DB_PATHS.INVITES .. "/" .. invite_code, {
-                isActive = true,
-                isAdmin = true,
-                maxUses = 1,
-                usedCount = 0
-            }, function(update_success, update_err)
-                if update_success then
-                    client.log("[Orion] Default admin invite updated: " .. invite_code)
-                else
-                    client.log("[Orion] Failed to update default admin invite: " .. (update_err or "unknown"))
-                end
-            end)
-        end
-    end)
-end
-
--- Remove or comment out this section:
-client.delay_call(0, function()
-    local userName = "Inspex" -- Replace with the name of the user you want to delete
-     
-    FirebaseDB.delete(DB_PATHS.USERS .. "/" .. userName, function(success, error)
-        if success then
-            client.log("[Orion] Successfully deleted user: " .. userName)
-        else
-            client.log("[Orion] Failed to delete user " .. userName .. ": " .. (error or "unknown error"))
-        end
-    end)
-    client.log("Deleting User:" .. userName)
-    createDefaultAdminInvite()
 end)
 
 --Used If I Ever Have To Clear A Path :)
