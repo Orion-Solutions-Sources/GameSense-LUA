@@ -20,13 +20,10 @@ table.distribute = function (t, r, k)  local result = {} for i, v in ipairs(t) d
 table.place = function (t, path, place)  local p = t for i, v in ipairs(path) do if type(p[v]) == "table" then p = p[v] else p[v] = (i < #path) and {} or place  p = p[v]  end end return t  end
 
 local FirebaseConfig = {
-    apiKey = "AIzaSyA6SNLPEkaLcJvyM4Vy9awhDFx1zOFElfQ",
-    projectId = "orion-solutions-38cd0",
-    databaseURL = "https://orion-solutions-38cd0-default-rtdb.europe-west1.firebasedatabase.app"
+    apiKey = "AIzaSyDGqLgNVep_8TU46q-Z1C7Q5x9JhFV2yrc",
+    projectId = "orion-solutions-d3796",
+    databaseURL = "https://orion-solutions-d3796-default-rtdb.europe-west1.firebasedatabase.app"
 }
-
-local SCRIPT_VERSION = "1.0" -- This should match your expected version
-local LOADED = false
 
 FireBaseRequest = function(endpoint, method, data, callback)
     local method_l = string.lower(tostring(method or "get"))
@@ -88,6 +85,10 @@ local FirebaseDB = {
     
     update = function(path, data, callback)
         FireBaseRequest(path, "PATCH", data, callback)
+    end,
+    
+    delete = function(path, callback)
+        FireBaseRequest(path, "DELETE", nil, callback)
     end
 }
 
@@ -529,6 +530,9 @@ local Menu = {
     LOGGEDIN = Groups.Angles:checkbox("LOGGED IN"),
     ISADMIN = Groups.Angles:checkbox("IS ADMIN"),
 }
+
+client.exec("Clear")
+client.exec("con_filter_enable 0")
 
 MathUtil = {
     clamp = function(value, min_val, max_val)
@@ -1191,18 +1195,6 @@ FastLadder = function(cmd)
 end
 
 AutoBuy = function()
-    local UtilityPurchase = Menu.Miscellaneous.BuyBot.Utilities.value
-
-    for i = 1, #UtilityPurchase do
-        local n = UtilityPurchase[i]
-
-        for k, v in pairs(Commands) do
-            if k == n then
-                client.exec(v)
-            end
-        end
-    end
-
     for k, v in pairs(Commands) do
         if k == Menu.Miscellaneous.BuyBot.Primary.value then
             client.exec(v)
@@ -1212,6 +1204,18 @@ AutoBuy = function()
     for k, v in pairs(Commands) do
         if k == Menu.Miscellaneous.BuyBot.Secondary.value then
             client.exec(v)
+        end
+    end
+
+    local UtilityPurchase = Menu.Miscellaneous.BuyBot.Utilities.value
+
+    for i = 1, #UtilityPurchase do
+        local n = UtilityPurchase[i]
+
+        for k, v in pairs(Commands) do
+            if k == n then
+                client.exec(v)
+            end
         end
     end
 
@@ -1574,6 +1578,12 @@ Login = function(username, password, remember)
                 Menu.Auth.StatusLabel:override("Status update failed")
             end
         end)
+
+        if user == nil or user == json.null then
+    Menu.Auth.StatusLabel:override("User doesn't exist")
+    return
+end
+
     end)
 end
 
@@ -1582,6 +1592,8 @@ Menu.Auth.Login:set_callback(function()
     local remember = Menu.Auth.RememberMe:get()
     
     Login(username, real_password, remember)
+
+    
 end)
 
 IsNumber = function(v)
@@ -2059,9 +2071,70 @@ client.delay_call(0, function()
     end
 end)
 
+-- Add this function to create a default admin invite code
+local function createDefaultAdminInvite()
+    local invite_code = "ADMIN001"  -- You can make this dynamic if needed
+    local created_by = "System"
+    local version = "Debug"
+    
+    -- Check if the invite already exists
+    FirebaseDB.read(DB_PATHS.INVITES .. "/" .. invite_code, function(success, invite)
+        if success and (invite == nil or invite == json.null) then
+            -- Invite doesn't exist, create it
+            local invite_data = {
+                code = invite_code,
+                createdAt = "04/09/2025",
+                createdBy = created_by,
+                isActive = true,
+                isAdmin = true,
+                maxUses = 1,
+                usedCount = 0,
+                version = version
+            }
+            
+            FirebaseDB.update(DB_PATHS.INVITES, {[invite_code] = invite_data}, function(create_success, create_err)
+                if create_success then
+                    client.log("[Orion] Default admin invite created: " .. invite_code)
+                else
+                    client.log("[Orion] Failed to create default admin invite: " .. (create_err or "unknown"))
+                end
+            end)
+        elseif success and invite then
+            -- Invite exists, ensure it has admin privileges
+            FirebaseDB.update(DB_PATHS.INVITES .. "/" .. invite_code, {
+                isActive = true,
+                isAdmin = true,
+                maxUses = 1,
+                usedCount = 0
+            }, function(update_success, update_err)
+                if update_success then
+                    client.log("[Orion] Default admin invite updated: " .. invite_code)
+                else
+                    client.log("[Orion] Failed to update default admin invite: " .. (update_err or "unknown"))
+                end
+            end)
+        end
+    end)
+end
+
+-- Remove or comment out this section:
+client.delay_call(0, function()
+    local userName = "Inspex" -- Replace with the name of the user you want to delete
+     
+    FirebaseDB.delete(DB_PATHS.USERS .. "/" .. userName, function(success, error)
+        if success then
+            client.log("[Orion] Successfully deleted user: " .. userName)
+        else
+            client.log("[Orion] Failed to delete user " .. userName .. ": " .. (error or "unknown error"))
+        end
+    end)
+    client.log("Deleting User:" .. userName)
+    createDefaultAdminInvite()
+end)
+
 --Used If I Ever Have To Clear A Path :)
 --client.delay_call(1, function()
---    FirebaseDB.update(DB_PATHS.INVITES, json.null, function(success, error)
+--    FirebaseDB.update(DB_PATHS.USERS, json.null, function(success, error)
 --        if success then
 --            client.log("[Orion] Removed INVITES path from database on launch")
 --        else
