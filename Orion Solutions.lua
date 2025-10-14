@@ -20,9 +20,9 @@ table.distribute = function (t, r, k)  local result = {} for i, v in ipairs(t) d
 table.place = function (t, path, place)  local p = t for i, v in ipairs(path) do if type(p[v]) == "table" then p = p[v] else p[v] = (i < #path) and {} or place  p = p[v]  end end return t  end
 
 local FirebaseConfig = {
-    apiKey = "AIzaSyDGqLgNVep_8TU46q-Z1C7Q5x9JhFV2yrc",
-    projectId = "orion-solutions-d3796",
-    databaseURL = "https://orion-solutions-d3796-default-rtdb.europe-west1.firebasedatabase.app"
+    apiKey = "AIzaSyBkx75L5S_QWWdKXPR10xTyjEOpTFIIc3g",
+    projectId = "orion-solutions-68199",
+    databaseURL = "https://orion-solutions-68199-default-rtdb.europe-west1.firebasedatabase.app"
 }
 
 FireBaseRequest = function(endpoint, method, data, callback)
@@ -185,7 +185,8 @@ local Globals = {
         LoginTime = nil,
         Stats = {  -- Add stats section
             KillCount = 0,
-            Coins = 0
+            Coins = 0,
+            TimesLoaded = 0
         },
     },
     ScreenX, ScreenY,
@@ -387,6 +388,13 @@ local LogsOption = {
     "Config Changes (Soon)"
 }
 
+local ResolverModes = {
+    "Math.Random",
+    "Soon"
+}
+
+local ConfigType = {"Local", "Cloud"}
+
 local ToolTips = {
     BackTrack = {[2] = "Default", [7] = "Maximum"},
     AspectRatios = { {125, "5:4"}, {133, "4:3"}, {150, "3:2"}, {160, "16:10"}, {178, "16:9"}, {200, "2:1"}, }
@@ -396,6 +404,44 @@ local NILFN = function()end
 
 local TabNames = {"Home", "Rage", "Anti-Aim", "Visuals", "Miscellaneous", "Casino"}
 
+local db do
+    db = {}
+    local Key = 'OrionConfigs::db'
+    db.db = database.read(Key)
+
+    db.save = function()
+        database.write(Key, db.db)
+        client.delay_call(0, function()
+            database.flush()
+        end)
+    end
+
+    do
+        if not db.db then
+            db.db = {
+                configs = {
+                    ['Local'] = {},
+                    ['Cloud'] = {},
+                }
+            }
+        end
+    end
+
+    local DefaultConfig = "eyJDYXNpbm8iOnsiQmV0QW1vdW50IjoiIiwiR2FtZSI6IkNvaW4gRmxpcCJ9LCJUYWJzIjoiSG9tZSIsIlZpc3VhbHMiOnsiQXNwZWN0UmF0aW8iOnsib24iOnRydWUsIlJhdGlvIjoxMzN9LCJCdWxsZXRUcmFjZXIiOnsiQ29sb3IiOiIjNzY3NkZGRkYiLCJvbiI6dHJ1ZX0sIldhdGVyTWFyayI6dHJ1ZX0sIkxPR0dFRElOIjp0cnVlLCJNaXNjZWxsYW5lb3VzIjp7IkFjY2VudENvbG9yIjoiI0E5OTNGRkZGIiwiQ2xhblRhZyI6dHJ1ZSwiQnV5Qm90Ijp7IkdyZW5hZGVzIjpbIkhFIEdyZW5hZGUiLCJNb2xvdG92IiwiU21va2UiLCJ+Il0sIlV0aWxpdGllcyI6WyJBcm1vciIsIkhlbG1ldCIsIlpldXMiLCJEZWZ1c2VyIiwifiJdLCJTZWNvbmRhcnkiOiJEZWFnbGVcL1Jldm9sdmVyIiwib24iOnRydWUsIlByaW1hcnkiOiJTY291dCJ9LCJBbnRpQmFja1N0YWIiOnsib24iOnRydWUsIkRpc3RhbmNlIjoxNjB9LCJGYXN0TGFkZGVyIjp0cnVlLCJMb2dzIjp7IkxvZ3NUeXBlIjpbIlNjcmVlbiIsIkNvbnNvbGUiLCJ+Il0sIm9uIjp0cnVlLCJMb2dzT3B0aW9uIjpbIkhpdCIsIk1pc3MiLCJDYXNpbm8iLCJDb25maWcgQ2hhbmdlcyAoU29vbikiLCJ+Il19fSwiSVNBRE1JTiI6dHJ1ZSwiQXV0aCI6eyJQYXNzV29yZCI6IioqKioqKioqKioqKioiLCJSZW1lbWJlck1lIjp0cnVlLCJVc2VyTmFtZSI6Ikluc3BleCJ9LCJSYWdlIjp7Ikp1bXBTY291dCI6dHJ1ZSwiUmVzb2x2ZXIiOnsiTW9kZSI6IlNvb24iLCJvbiI6dHJ1ZX0sIkJhY2tUcmFja0V4cGxvaXQiOnsib24iOnRydWUsIkJhY2tUcmFja1ZhbHVlIjo3fSwiSW1wcm92ZWRQcmVkaWN0aW9uIjp0cnVlfX0="
+
+    db.db.configs['Local'][1] = {"Default", DefaultConfig}
+    db.db.configs['Cloud'][2] = {"Default Cloud"}
+    db.configs = {"Default"}
+    db.configs.authors = {'qqwerty', 'debil', 'esoterik', 'dalbaeb'}
+end
+
+local condition_list do
+    math.randomseed(globals.framecount() + globals.tickcount() + globals.realtime())
+    pui.macros.r = '\aC8C8C8'
+    pui.macros.ez = '\aafafff'
+    condition_list = {"Default", "Standing", "Running", "Slowwalking", "Crouch", "Crouch Move", "Jumping", "Crouching Air", "Fake Lag", "Manual yaw", "Safe Head", "Dormant"}
+end
+
 local Menu = {
     MainHeader = GUI.Header("Orion Solutions", Groups.FakeLag),
 
@@ -404,6 +450,7 @@ local Menu = {
     Home = {
         Statistics = {
             GUI.Header("Statistics", Groups.Other),
+            TimesLoadedCounter = Groups.Other:label("\f<silent>Times Loaded: \v0"),
             KillCounter = Groups.Other:label("\f<silent>Kills: \v0"),
             CoinCounter = Groups.Other:label("\f<silent>Coins: \v0"),
             GUI.Space(Groups.Other),
@@ -412,26 +459,35 @@ local Menu = {
         },
 
         ConfigSystem = {
-            --GUI.Header("New config", Groups.FakeLag),
-		    --name = Groups.FakeLag:textbox("Name"),
-		    --create = Groups.FakeLag:button("Create", NILFN),
-		    --import = Groups.FakeLag:button("Import", NILFN),
+            GUI.Space(Groups.Other),
+            GUI.Header("Config Type", Groups.Other),
+            Type = Groups.Other:combobox("\n", ConfigType, nil, false),
 
-            --GUI.Header("Your configs", Groups.Angles),
-		    --list = Groups.Angles:listbox("Configs", {"Default"}),
-		    --selected = Groups.Angles:label("Selected: \vDefault"),
+            GUI.Header("New config", Groups.FakeLag),
+            Name = Groups.FakeLag:textbox("Name", nil, false),
+            Create = Groups.FakeLag:button("Create & Save"),
+            Import = Groups.FakeLag:button("Import & Load"),
+
+            GUI.Header("Your configs", Groups.Angles),
+		    List = Groups.Angles:listbox("Configs", db.configs, nil, false),
+		    Selected = Groups.Angles:label("Selected: \vDefault"),
 		    --list_report = Groups.Angles:label("REPORT"),
-		    --load = Groups.Angles:button("\f<orion>  Load", NILFN),
-		    --loadaa = Groups.Angles:button("Load AA only", NILFN),
-		    --save = Groups.Angles:button("Save", NILFN),
-		    --export = Groups.Angles:button("Export", NILFN),
-		    --delete = Groups.Angles:button("\aD95148FFDelete", NILFN),
-		    --deleteb = Groups.Angles:button("\aD9514840Delete", NILFN),
+		    Load = Groups.Angles:button("Load"),
+		    LoadAA = Groups.Angles:button("Load AA"),
+		    Save = Groups.Angles:button("Save"),
+		    Export = Groups.Angles:button("Export"),
+		    Delete = Groups.Angles:button("\aFF0000FFDelete"),
         },
     },
 
     Rage = {
         GUI.Header("Rage", Groups.Angles),
+
+        Resolver = GUI.Feature({Groups.Angles:checkbox("Resolver")}, function (Parent)
+		    return {
+                Mode = Groups.Angles:combobox("Resolver Mode", ResolverModes),
+		    }, true
+	    end),
 
         BackTrackExploit = GUI.Feature({Groups.Angles:checkbox("Enhance Backtrack")}, function (Parent)
 		    return {
@@ -441,11 +497,10 @@ local Menu = {
 
         ImprovedPrediction = Groups.Angles:checkbox("Improved Prediction"),
 		JumpScout = Groups.Angles:checkbox("Jump Scout"),
-        JumpScoutExper = Groups.Angles:checkbox("Jump Scout(Experimental) "),
     },
     
     AntiAim = {
-
+        Conditon = Groups.Angles:combobox("\vCondition", condition_list, nil, false)
     },
 
     Visuals = {
@@ -744,7 +799,7 @@ Glow = function(x, y, w, h, glow_intensity, bg_r, bg_g, bg_b, bg_a, glow_r, glow
 end
 
 -- Firebase Storage Configuration
-local FIREBASE_LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-38cd0.firebasestorage.app/o/logo.png?alt=media&token=d15883da-9060-43b1-99cb-c0208fedfeb9"
+local FIREBASE_LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/logo.png?alt=media&token=d15883da-9060-43b1-99cb-c0208fedfeb9"
 
 -- Global logo variables
 local logo = nil
@@ -760,7 +815,7 @@ local function downloadFirebaseStorageFile(storagePathOrUrl, callback)
         url = storagePathOrUrl
     else
         -- Firebase Storage path (pfps, etc.)
-        url = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-38cd0.firebasestorage.app/o/"
+        url = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/"
             .. storagePathOrUrl .. "?alt=media"
     end
 
@@ -1333,6 +1388,7 @@ MenuUpdate = function()
     Menu.Casino.BetAmount:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
     Menu.Casino.BetAmountLabel:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
     Menu.Casino.Flip:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
+    Menu.Home.ConfigSystem.Type:set_enabled(false)
 end
 
 MenuUpdate()
@@ -1513,7 +1569,8 @@ Login = function(username, password, remember)
         -- Initialize stats with existing data or defaults
         Globals.UserData.Stats = {
             KillCount = user.stats and user.stats.KillCount or 0,
-            Coins = user.stats and user.stats.Coins or 0
+            Coins = user.stats and user.stats.Coins or 0,
+            TimesLoaded = (user.stats and user.stats.TimesLoaded or 0) + 1
         }
         
         FirebaseDB.update(DB_PATHS.ONLINE_USERS, online_update, function(update_success, error)
@@ -1538,6 +1595,7 @@ Login = function(username, password, remember)
                 if Menu.Stats then
                     Menu.Stats.KillCounter:override("\f<silent>Kills: \v" .. Globals.UserData.Stats.KillCount)
                     Menu.Stats.CoinCounter:override("\f<silent>Coins: \v" .. Globals.UserData.Stats.Coins)
+                    Menu.Stats.TimesLoaded:override("\f<silent>Times Loaded: \v" .. Globals.UserData.Stats.TimesLoaded)
                     Menu.Casino.Balance:override("\f<silent>Balance: \v" .. Globals.UserData.Stats.Coins)
                 end
                 
@@ -1655,6 +1713,7 @@ client.set_event_callback("paint_ui", function()
     if Globals.UserData.LoggedIN then
         Menu.Home.Statistics.KillCounter:override(pui.macros.silent .. "Kills: \v" .. Globals.UserData.Stats.KillCount)
         Menu.Home.Statistics.CoinCounter:override(pui.macros.silent .. "Coins: \v" .. Globals.UserData.Stats.Coins)
+        Menu.Home.Statistics.TimesLoadedCounter:override(pui.macros.silent .. "Times Loaded: \v" .. Globals.UserData.Stats.TimesLoaded)
         Menu.Home.Statistics.OnlineUsers:override(pui.macros.silent .. "Online: \v" .. Globals.OnlineUsers)
         Menu.Casino.Balance:override(pui.macros.silent .. "Balance: \v" .. Globals.UserData.Stats.Coins)
     end
@@ -1716,11 +1775,12 @@ SaveStatsToFirebase = function()
     end)
 end
 
-UpdateStats = function(kills, coins)
+UpdateStats = function(kills, coins, loaded)
     if not Globals.UserData.LoggedIN then return end
     
     Globals.UserData.Stats.KillCount = (Globals.UserData.Stats.KillCount or 0) + (kills or 0)
     Globals.UserData.Stats.Coins = (Globals.UserData.Stats.Coins or 0) + (coins or 0)
+    Globals.UserData.Stats.TimesLoaded = (Globals.UserData.Stats.TimesLoaded or 0) (loaded or 0)
     
     SaveStatsToFirebase()
 end
@@ -1863,10 +1923,36 @@ client.set_event_callback('setup_command', function(cmd)
         local vel = math.sqrt(vel_x^2 + vel_y^2)
         ui.set(air_strafe, not (cmd.in_jump and (vel < 10)) or ui.is_menu_open())
     end
+end)
 
-    if Menu.Rage.JumpScoutExper:get() then
-        
+Resolve = function(Player)
+    if not Menu.Rage.Resolver.on.value then        
+        plist.set(Player, "Correction active", true)
 
+        plist.set(Player, "Force body yaw", false)
+        plist.set(Player, "Force body yaw value", 0)
+
+        return
+    end
+
+    if Menu.Rage.Resolver.Mode.value == "Math.Random" then
+        plist.set(Player, "Correction active", false)
+
+        plist.set(Player, "Force body yaw", true)
+        plist.set(Player, "Force body yaw value", math.random(-60, 60))
+    elseif Menu.Rage.Resolver.Mode.value == "Soon" then
+        plist.set(Player, "Correction active", true)
+
+        plist.set(Player, "Force body yaw", false)
+        plist.set(Player, "Force body yaw value", 0)
+    end
+end
+
+client.set_event_callback("net_update_start", function()
+    local Enemies = entity.get_players(true)
+    for i = 1, #Enemies do 
+        local Player = Enemies[i]
+        Resolve(Player)
     end
 end)
 
@@ -2036,6 +2122,93 @@ client.delay_call(0, function()
         end
     end
 end)
+
+local Config do 
+    Config = pui.setup(Menu)
+
+    Update = function()
+        db.configs = {}
+        for i, cfgs in pairs(db.db.configs[Menu.Home.ConfigSystem.Type.value]) do
+            table.insert(db.configs, pui.format('[\v'..i..'\r] ' .. cfgs[1])) 
+        end
+        Menu.Home.ConfigSystem.List:update(db.configs)
+    end Update()
+
+    GetConfig = function()
+        local t = db.db.configs['Local'][ Menu.Home.ConfigSystem.List.value + 1]
+        return t[1], t[2]
+    end
+
+    Create = function(name, cfg)
+        name = cfg and name or Menu.Home.ConfigSystem.Name:get()
+        if #name >= 1 then
+            table.insert(db.db.configs['Local'], {name, cfg or base64.encode(json.stringify(Config:save())) } )
+            db.save()
+            Menu.Home.ConfigSystem.Name:set('')
+        end
+        Update()
+        Menu.Home.ConfigSystem.List:set(#db.db.configs['Local'] - 1)
+    end
+
+    Menu.Home.ConfigSystem.Delete:set_callback(function()
+        local val = Menu.Home.ConfigSystem.List:get()
+
+        client.exec('playvol buttons\\button16 0.5')
+        table.remove(db.db.configs['Local'], val + 1)
+        Menu.Home.ConfigSystem.List:set(0)
+        db.save()
+        Update()
+    end)
+
+    Menu.Home.ConfigSystem.Save:set_callback(function()
+        local cfg = base64.encode( json.stringify(Config:save()) )
+        db.db.configs['Local'][Menu.Home.ConfigSystem.List.value + 1][2] = cfg
+
+        client.exec('playvol buttons\\button16 0.5')
+        db.save()
+    end)
+
+    Menu.Home.ConfigSystem.Export:set_callback(function()
+        local name, cfg = GetConfig()
+        local text = string.format('OrionConfigs::%s::%s', name, cfg)
+        client.exec('playvol buttons\\button18 0.5')
+        clipboard.set(text)
+    end)
+
+    Load = function(self, cfg)
+        local name, config = GetConfig()
+        local decrypted = json.parse( base64.decode(config) )
+        Config:load(decrypted, self.name == "Load AA" and "AntiAim" or nil)
+        client.exec('playvol buttons\\button17 0.5')
+        db.save()
+    end
+
+    Menu.Home.ConfigSystem.Import:set_callback(function()
+        local text = clipboard.get()
+        local name, config = text:match("OrionConfigs::([%s%S]+)::([%s%S]+)")
+        if not name or not config then return end
+        Create(name,config)
+        Load(Menu.Home.ConfigSystem.Load)
+    end)
+
+    Menu.Home.ConfigSystem.Load:set_callback(Load)
+    Menu.Home.ConfigSystem.LoadAA:set_callback(Load)
+    Menu.Home.ConfigSystem.Create:set_callback(Create)
+
+    Menu.Home.ConfigSystem.List:set_callback(function(self)
+        local table = {}
+        if Menu.Home.ConfigSystem.Type.value == 'Cloud' then
+            for i=1, #db.db.configs['Cloud'] do
+                table[i] = i == 1 and db.db.configs['Cloud'][1] or pui.format('\r[\v'..db.configs.authors[i - 1]..'\r] ~ '.. (i == self.value + 1 and '\v' or '') .. db.db.configs['Cloud'][i])
+            end
+        else
+            table = db.configs
+        end
+        self:update(table)
+        Menu.Home.ConfigSystem.Selected:set("Selected - \v"..table[self.value + 1])
+        client.exec('playvol buttons\\lightswitch2 0.5')
+    end, true)
+end
 
 --Used If I Ever Have To Clear A Path :)
 --client.delay_call(1, function()
