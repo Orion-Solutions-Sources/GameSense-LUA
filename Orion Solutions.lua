@@ -1,5 +1,6 @@
 local http = require "gamesense/http"
 local pui = require "gamesense/pui"
+local color = require('gamesense/color')
 local msgpack = require("gamesense/msgpack")
 local base64 = require("gamesense/base64")
 local json = require "json"
@@ -74,7 +75,7 @@ FireBaseRequest = function(endpoint, method, data, callback)
     http_fn(url, options, cb)
 end
 
-local FirebaseDB = {
+local FireBase = {
     read = function(path, callback)
         FireBaseRequest(path, "GET", nil, callback)
     end,
@@ -166,12 +167,12 @@ local References = {
     }
 }
 
-local DB_PATHS = {
-    USERS = "/users",
-    INVITES = "/invites",
-    SETTINGS = "/settings",
-    ONLINE_USERS = "/online_users",
-    BANNED_USERS = "/banned_users"
+local PATHS = {
+    Users = "/users",
+    Invites = "/invites",
+    Settings = "/settings",
+    OnlineUsers = "/online_users",
+    BannedUsers = "/banned_users"
 }
 
 local Globals = {
@@ -262,6 +263,199 @@ local colors = {
 	text	= color.rgb(230),
 }
 
+local utils do
+    utils = {}
+
+    utils.lerp = function(start, end_pos, time, ampl)
+        if start == end_pos then return end_pos end
+        ampl = ampl or 1/globals.frametime()
+        local frametime = globals.frametime() * ampl
+        time = time * frametime
+        local val = start + (end_pos - start) * time
+        if(math.abs(val - end_pos) < 0.25) then return end_pos end
+        return val 
+    end
+
+    utils.to_hex = function(color, cut)
+        return string.format("%02X%02X%02X".. (cut and '' or "%02X"), color.r, color.g, color.b, color.a or 255)
+    end
+
+    utils.to_rgb = function(hex)
+        hex = hex:gsub("^#", "")
+        return color(tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16), tonumber(hex:sub(7, 8), 16) or 255)
+    end
+
+    utils.printc = function(text)
+        local result = {}
+
+        for color, content in text:gmatch("\a([A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9])([^%z\a]*)") do
+            table.insert(result, {color, content})
+        end
+        local len = #result
+        for i, t in pairs(result) do
+            c = utils.to_rgb(t[1])
+            client.color_log(c.r, c.g, c.b, t[2], len ~= i and '\0' or '')
+        end
+    end
+
+    utils.normalize_yaw = function(x)
+        return ((x + 180) % 360) - 180
+    end
+    
+    utils.sine_yaw = function(tick, min, max)
+        local amplitude = (max - min) / 2
+        local center = (max + min) / 2
+        return center + amplitude * math.sin(tick * 0.05)
+    end
+    
+    utils.shuffle_table = function(t)
+        for i = #t, 2, -1 do
+            local j = math.random(i)
+            t[i], t[j] = t[j], t[i]
+        end
+    end
+
+    utils.rectangle = function(x, y, w, h, r, g, b, a, radius)
+        radius = math.min(radius, w / 2, h / 2)
+
+        local radius_2 = radius * 2
+
+        renderer.rectangle(x + radius, y, w - radius_2, h, r, g, b, a)
+        renderer.rectangle(x, y + radius, radius, h - radius_2, r, g, b, a)
+        renderer.rectangle(x + w - radius, y + radius, radius, h - radius_2, r, g, b, a)
+
+        renderer.circle(x + radius, y + radius, r, g, b, a, radius, 180, 0.25)
+        renderer.circle(x + radius, y + h - radius, r, g, b, a, radius, 270, 0.25)
+        renderer.circle(x + w - radius, y + radius, r, g, b, a, radius, 90, 0.25)
+        renderer.circle(x + w - radius, y + h - radius, r, g, b, a, radius, 0, 0.25)
+    end
+
+    utils.rectangle_outline = function(x, y, w, h, r, g, b, a)
+        renderer.line(x, y, x + w, y, r, g, b, a)  -- Верхняя линия
+        renderer.line(x + w, y, x + w, y + h, r, g, b, a)  -- Правая линия
+        renderer.line(x + w, y + h, x, y + h, r, g, b, a)  -- Нижняя линия
+        renderer.line(x, y + h, x, y, r, g, b, a)  -- Левая линия
+    end
+end
+
+local drag do
+    local is_menu_visible = false
+    local is_mouse_held_before_hover = false
+    local mouse = vector()
+
+    drag = {}
+    drag.windows = {}
+
+    function drag.on_config_load()
+        for _, point in pairs(drag.windows) do
+            point.position = vector(point.ui_callbacks.x:get()*screen.size.x/1000, point.ui_callbacks.y:get()*screen.size.y/1000)
+        end
+    end
+
+    function drag.register(position, size, global_name, ins_function, limits, outline)
+        local data = {
+            size = size,
+            is_dragging = false,
+            drag_position = vector(),
+            is_mouse_held_before_hover = false, -- теперь локально для каждого элемента
+            global_name = global_name,
+            ins_function = ins_function,
+            ui_callbacks = {x = position.x, y = position.y},
+            limits = limits and {x={min=limits[1], max=limits[2]}, y={min=limits[3],max=limits[4]}} or nil,
+            outline = outline == nil and true or outline
+        }
+        data.position = vector(data.ui_callbacks.x.value/1000*screen.size.x - data.size.x/2, data.ui_callbacks.y.value/1000*screen.size.y - data.size.y/2)
+         
+        table.insert(drag.windows, data)
+        return setmetatable(data, { __index = drag })
+    end
+    
+    
+    function drag:limit_positions(table)
+        self.position.x = math.max(table and table.x.min or 0, math.min(self.position.x, table and table.x.max or screen.size.x - self.size.x))
+        self.position.y = math.max(table and table.y.min or 0, math.min(self.position.y, table and table.y.max or screen.size.y - self.size.y))
+    end
+    
+    function drag:is_in_area(mouse_position)
+        return mouse_position.x >= self.position.x and mouse_position.x <= self.position.x + self.size.x and 
+               mouse_position.y >= self.position.y and mouse_position.y <= self.position.y + self.size.y
+    end
+    
+    function drag:update(...)
+        if is_menu_visible then
+            if self.outline then
+                utils.rectangle_outline(self.position.x, self.position.y, self.size.x, self.size.y, 255, 255, 255, 100)
+            end
+            local is_in_area = self:is_in_area(mouse)
+            local is_key_pressed = client.key_state(0x01)
+    
+            if is_in_area and client.key_state(0x02) then
+                self.position.x = (screen.size.x - self.size.x) / 2
+                self.ui_callbacks.x:set(math.floor(self.position.x / screen.size.x * 1000))
+            end
+    
+            if is_key_pressed and not self.is_dragging and not is_in_area then
+                self.is_mouse_held_before_hover = true
+            end
+    
+            if (is_in_area or self.is_dragging) and is_key_pressed and not self.is_mouse_held_before_hover then
+                if not self.is_dragging then
+                    self.is_dragging = true
+                    self.drag_position = mouse - self.position
+                else
+                    self.position = mouse - self.drag_position
+                    self:limit_positions(self.limits)
+                    self.ui_callbacks.x:set(math.floor(self.position.x/screen.size.x*1000))
+                    self.ui_callbacks.y:set(math.floor(self.position.y/screen.size.y*1000))
+                end
+            elseif not is_key_pressed then
+                self.is_dragging = false
+                self.drag_position = vector()
+                self.is_mouse_held_before_hover = false
+            end
+        end
+        self.ins_function(self, ...)
+    end
+    
+    local function block(cmd)
+        cmd.in_attack = false
+        cmd.in_attack2 = false
+    end
+    
+    local function mouse_input()
+        height = vector(renderer.measure_text('d', '1')).y
+        is_menu_visible = ui.is_menu_open()
+        if is_menu_visible then
+            mouse = vector(ui.mouse_position())
+            local is_key_pressed = client.key_state(0x01)
+            local in_area = false
+            if is_menu_visible then
+                for _, window in pairs(drag.windows) do
+                    if window.is_dragging or window:is_in_area(mouse) then
+                        in_area = true
+                        break
+                    end
+                end
+            end
+            
+            if in_area then
+                client.set_event_callback("setup_command", block)
+            else
+                client.unset_event_callback("setup_command", block)
+            end
+
+            
+            if not is_key_pressed then
+                is_mouse_held_before_hover = false
+            end
+            
+            return not in_area
+        end
+    end
+    
+    client.set_event_callback("paint", mouse_input)
+end 
+
 local GUI = {
 	Header = function(name, group) 
 		r = {}
@@ -305,6 +499,9 @@ pui.macros.p = "\a7676FF•\r"
 pui.macros.c = "\v•\r" 
 pui.macros.orion = colors.hex
 pui.macros.orionb = string.sub(colors.hex, 2, 7)
+pui.macros.r = '\aC8C8C8'
+pui.macros.ez = '\aafafff'
+pui.macros.z = '\affffff'
 
 local PrimaryWeapons = {
     "-", 
@@ -459,24 +656,25 @@ local Menu = {
         },
 
         ConfigSystem = {
-            GUI.Space(Groups.Other),
-            GUI.Header("Config Type", Groups.Other),
-            Type = Groups.Other:combobox("\n", ConfigType, nil, false),
-
-            GUI.Header("New config", Groups.FakeLag),
+            NewConfigHeader = GUI.Header("New Config", Groups.FakeLag),
             Name = Groups.FakeLag:textbox("Name", nil, false),
             Create = Groups.FakeLag:button("Create & Save"),
             Import = Groups.FakeLag:button("Import & Load"),
 
-            GUI.Header("Your configs", Groups.Angles),
+            GUI.Space(Groups.FakeLag),
+            GUI.Header("Config Type", Groups.FakeLag),
+            Type = Groups.FakeLag:combobox("\n", ConfigType, nil, false),
+
+            GUI.Header("Your Configs", Groups.Angles),
 		    List = Groups.Angles:listbox("Configs", db.configs, nil, false),
 		    Selected = Groups.Angles:label("Selected: \vDefault"),
-		    --list_report = Groups.Angles:label("REPORT"),
 		    Load = Groups.Angles:button("Load"),
 		    LoadAA = Groups.Angles:button("Load AA"),
 		    Save = Groups.Angles:button("Save"),
 		    Export = Groups.Angles:button("Export"),
 		    Delete = Groups.Angles:button("\aFF0000FFDelete"),
+
+            Upload = Groups.Other:button("\v Upload To Cloud")
         },
     },
 
@@ -546,6 +744,7 @@ local Menu = {
                 LogsOption = Groups.Angles:multiselect("Logs Option", LogsOption),
 		    }, true
 	    end),
+        DebugPanel = Groups.Angles:checkbox("Debug Panel"),
         ClanTag = Groups.Angles:checkbox("Orion-Tag"),
         FastLadder = Groups.Angles:checkbox("Fast Ladder"),
 
@@ -799,7 +998,7 @@ Glow = function(x, y, w, h, glow_intensity, bg_r, bg_g, bg_b, bg_a, glow_r, glow
 end
 
 -- Firebase Storage Configuration
-local FIREBASE_LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/logo.png?alt=media&token=d15883da-9060-43b1-99cb-c0208fedfeb9"
+local FIREBASE_LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/logo.png?alt=media&token=67b51834-a77d-423c-8502-bea77a714cec"
 
 -- Global logo variables
 local logo = nil
@@ -893,7 +1092,7 @@ local function getUserProfileImage(username, steamid, callback)
     end
 
     -- fetch Firebase record
-    FirebaseDB.read(DB_PATHS.USERS .. "/" .. username, function(success, userData)
+    FireBase.read(PATHS.Users .. "/" .. username, function(success, userData)
         if success and userData then
             local imgUrl = userData.profileImageStatic or userData.profileImage
             if imgUrl and imgUrl ~= "" then
@@ -905,38 +1104,25 @@ local function getUserProfileImage(username, steamid, callback)
     end)
 end
 
-local my = {
-    entity = entity.get_local_player(),
-    valid = false,
+local LocalPlayer = {
+    Entity = entity.get_local_player(),
+    Valid = false,
 
-    threat = client.current_threat(),
+    Threat = client.current_threat(),
 
-    scoped = false,
-    weapon = nil,
+    Scoped = false,
+    Weapon = nil,
 
-    side = 0,
-    origin = vector(),
-    velocity = -1,
-    movetype = -1,
-    jumping = false,
+    Side = 0,
+    Origin = vector(),
+    Velocity = -1,
+    MoveType = -1,
+    Jumping = false,
 
-    in_score = false,
-    command_number = 0,
+    InScore = false,
+    CommandNumber = 0,
 
-    state = -1,
-    states = {
-        unknown = -1,
-        standing = 2,
-        running = 3,
-        walking = 4,
-        crouching = 5,
-        sneaking = 6,
-        air = 7,
-        air_crouch = 8,
-        freestanding = 9,
-        manual_yaw = 10,
-        planting = 11
-    }
+    State = "Standing"
 
 }
 
@@ -1061,7 +1247,7 @@ local Shots = Shots or {}
 local Logs = Logs or {}
 local HitLogs = HitLogs or {}
 local CasinoLogs = CasinoLogs or {}
-local hitgroup_names = {'generic', 'head', 'chest', 'stomach', 'left arm', 'right arm', 'left leg', 'right leg', 'neck', '?', 'gear'}
+local HitgroupNames = {'Generic', 'Head', 'Chest', 'Stomach', 'Left Arm', 'right Arm', 'Left Leg', 'Right Leg', 'Neck', '?', 'Gear'}
 
 DrawLog = function(text, x, y, r, g, b, a, text2)
      -- measure main text (right body)
@@ -1147,7 +1333,7 @@ RenderScreenLogs = function()
                     table.insert(logs_to_remove, i)
                 else
                     if s.Hit and table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Hit") then
-                        local HitText = "Hit ".. entity.get_player_name(s.Target) .. " for "..s.Dmg.. " in the "..hitgroup_names[s.HitGroup + 1]
+                        local HitText = "Hit ".. entity.get_player_name(s.Target) .. " for "..s.Damage.. " in the "..HitgroupNames[s.HitGroup + 1]
                         local w, h = DrawLog(HitText, (Globals.ScreenX / 2), Globals.ScreenY / 2 + offset, 255, 255, 255, 0, "")
                         DrawLog(HitText, (Globals.ScreenX / 2) - w/2, (Globals.ScreenY / 2 + offset) + 200, 255, 255, 255, s.Alpha, "Hit")
                         offset = offset + h + 10
@@ -1219,31 +1405,201 @@ FastLadder = function(cmd)
         return
     end
 
-    if not my.valid then
+    if not LocalPlayervalid then
         return
     end
 
-    if entity.get_prop(my.weapon, "m_bPinPulled") == 1 then
+    if entity.get_prop(LocalPlayer.Entity, 'm_MoveType') ~= 9 then return end
+
+    local weapon = entity.get_player_weapon(LocalPlayer.Entity)
+    if not weapon then return end
+
+    local throw_time = entity.get_prop(weapon, 'm_fThrowTime')
+
+    if throw_time ~= nil and throw_time ~= 0 then
         return
     end
 
-    if my.movetype ~= 9 then
-        return
+    if cmd.forwardmove > 0 then
+        if cmd.pitch < 45 then
+            cmd.pitch = 89
+            cmd.in_moveright = 1
+            cmd.in_moveleft = 0
+            cmd.in_forward = 0
+            cmd.in_back = 1
+        
+            if cmd.sidemove == 0 then
+                cmd.yaw = cmd.yaw + 90
+            end
+        
+            if cmd.sidemove < 0 then
+                cmd.yaw = cmd.yaw + 150
+            end
+        
+            if cmd.sidemove > 0 then
+                cmd.yaw = cmd.yaw + 30
+            end
+        end
+    elseif cmd.forwardmove < 0 then
+        cmd.pitch = 89
+        cmd.in_moveleft = 1
+        cmd.in_moveright = 0
+        cmd.in_forward = 1
+        cmd.in_back = 0
+        
+        if cmd.sidemove == 0 then
+            cmd.yaw = cmd.yaw + 90
+        end
+        
+        if cmd.sidemove > 0 then
+            cmd.yaw = cmd.yaw + 150
+        end
+        
+        if cmd.sidemove < 0 then
+            cmd.yaw = cmd.yaw + 30
+        end
     end
-
-    if cmd.forwardmove == 0 then
-        return
-    end
-
-    local side = cmd.forwardmove < 0
-
-    cmd.pitch = 89
-    cmd.yaw = MathUtil.normalize_yaw(cmd.move_yaw + 90)
-    cmd.in_moveleft = side and 1 or 0
-    cmd.in_moveright = side and 0 or 1
-    cmd.in_forward = side and 1 or 0
-    cmd.in_back = side and 0 or 1
 end
+
+-- Add these global variables at the top with your other globals
+local DebugPanelData = {
+    x = 100,
+    y = Globals.ScreenY * 0.33,
+    dragging = false,
+    drag_x = 0,
+    drag_y = 0,
+    size = vector(200, 80), -- Estimated size for the panel
+    registered = false -- Track if we've registered with the drag system
+}
+
+-- Register the debug panel with the drag system
+local function registerDebugPanelDrag()
+    if not DebugPanelData.registered then
+        drag.register(
+            vector(DebugPanelData.x, DebugPanelData.y), -- position
+            DebugPanelData.size, -- size
+            "debug_panel", -- global name
+            function(self, ...) -- ins_function (will be called in update)
+                -- This function will handle the rendering
+                DebugPanel()
+            end,
+            {0, Globals.ScreenX - DebugPanelData.size.x, 0, Globals.ScreenY - DebugPanelData.size.y}, -- limits
+            false -- outline (set to false since we don't want the drag outline on debug panel)
+        )
+        DebugPanelData.registered = true
+    end
+end
+
+DebugPanel = function()
+    if not Menu.Miscellaneous.DebugPanel:get() then
+        return
+    end
+
+    -- Register with drag system on first call
+    if not DebugPanelData.registered then
+        registerDebugPanelDrag()
+        return
+    end
+
+    local accent_r, accent_g, accent_b = Menu.Miscellaneous.AccentColor:get()
+    local font_flag = "b"  -- Bold font like WRAITH
+    
+    -- Find our drag window data
+    local dragWindow = nil
+    for _, window in pairs(drag.windows) do
+        if window.global_name == "debug_panel" then
+            dragWindow = window
+            break
+        end
+    end
+    
+    if not dragWindow then
+        return
+    end
+    
+    -- Use position from drag system
+    local panel_x = dragWindow.position.x
+    local panel_y = dragWindow.position.y
+    
+    -- Elements with WRAITH-like styling
+    local elements = {
+        { text = "- CONDITION: " .. string.upper(LocalPlayer.State or "UNKNOWN"), r = 240, g = 240, b = 240, a = 220 },
+        { text = "- TARGET: " .. string.upper(LocalPlayer.Threat == nil and "?" or string.sub(entity.get_player_name(LocalPlayer.Threat) or "?", 1, 12)), r = 240, g = 240, b = 240, a = 220 },
+        { text = "- EXPLOIT: " .. (References.Rage.Aimbot.DoubleTap[1]:get() and "CHARGED" or "READY"), r = 240, g = 240, b = 240, a = 220 },
+        { text = "- ORION: " .. (Globals.UserData.Version or "LIVE"), r = 240, g = 240, b = 240, a = 220 }
+    }
+    
+    -- Calculate panel size
+    local max_width = 0
+    local text_height = 0
+    for i, element in ipairs(elements) do
+        local w, h = renderer.measure_text(font_flag, element.text)
+        max_width = math.max(max_width, w)
+        if i == 1 then text_height = h end
+    end
+    
+    local bg_padding_x = 18
+    local bg_padding_y = 7
+    local bg_width = max_width + bg_padding_x * 2
+    local bg_height = text_height * #elements + bg_padding_y * 2
+    
+    -- Update the size in drag system if needed
+    if dragWindow.size.x ~= bg_width or dragWindow.size.y ~= bg_height then
+        dragWindow.size = vector(bg_width, bg_height)
+    end
+    
+    -- WRAITH-style gradient background
+    renderer.gradient(panel_x, panel_y, bg_width / 1.5, bg_height, 12, 12, 12, 0, 12, 12, 12, 75, true)
+    renderer.gradient(panel_x + bg_width / 1.5, panel_y, bg_width / 1.5, bg_height, 12, 12, 12, 75, 12, 12, 12, 0, true)
+    
+    -- Gradient line
+    renderer.gradient(panel_x, panel_y + bg_height, bg_width / 1.5, 1, 0, 0, 0, 0, 220, 220, 220, 220, true)
+    renderer.gradient(panel_x + bg_width / 1.5, panel_y + bg_height, bg_width / 1.5, 1, 220, 220, 220, 255, 0, 0, 0, 0, true)
+    
+    -- Draw elements with colored values
+    for i, element in ipairs(elements) do
+        local text = element.text
+        local w, h = renderer.measure_text(font_flag, text)
+        
+        local prefix_end = text:find(": ")
+        if prefix_end then
+            local prefix = text:sub(1, prefix_end + 1)
+            local value = text:sub(prefix_end + 2)
+            
+            -- White prefix
+            renderer.text(panel_x + bg_padding_x, panel_y + bg_padding_y + (h * (i - 1)), 
+                         255, 255, 255, element.a, font_flag, 0, prefix)
+            
+            -- Accent colored value
+            local prefix_w = renderer.measure_text(font_flag, prefix)
+            renderer.text(panel_x + bg_padding_x + prefix_w, panel_y + bg_padding_y + (h * (i - 1)), 
+                         accent_r, accent_g, accent_b, element.a, font_flag, 0, value)
+        else
+            renderer.text(panel_x + bg_padding_x, panel_y + bg_padding_y + (h * (i - 1)), 
+                         element.r, element.g, element.b, element.a, font_flag, 0, text)
+        end
+    end
+end
+
+-- Update the paint_ui callback to use the drag system
+client.set_event_callback("paint_ui", function()
+    if not Globals.UserData.LoggedIN then
+        return
+    end
+
+    -- Your existing paint_ui code...
+    
+    if Menu.Miscellaneous.DebugPanel:get() then
+        -- The drag system will automatically call DebugPanel through the registered function
+        -- We just need to find our drag window and call update
+        for _, window in pairs(drag.windows) do
+            if window.global_name == "debug_panel" then
+                window:update()
+                break
+            end
+        end
+    end
+end)
 
 AutoBuy = function()
     for k, v in pairs(Commands) do
@@ -1362,6 +1718,10 @@ MenuUpdate = function()
 		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, "Home"})
 	end)
 
+    pui.traverse({Menu.Home.ConfigSystem.NewConfigHeader, Menu.Home.ConfigSystem.Name, Menu.Home.ConfigSystem.Create, Menu.Home.ConfigSystem.Import}, function(ref, path)
+        ref:depend({Menu.LOGGEDIN, true}, {Menu.Home.ConfigSystem.Type, "Local"})
+    end)
+
     pui.traverse(Menu.MainHeader, function(ref, path)
 		ref:depend({Menu.LOGGEDIN, true})
 	end)
@@ -1388,21 +1748,23 @@ MenuUpdate = function()
     Menu.Casino.BetAmount:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
     Menu.Casino.BetAmountLabel:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
     Menu.Casino.Flip:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
-    Menu.Home.ConfigSystem.Type:set_enabled(false)
+    --Menu.Home.ConfigSystem.Type:set_enabled(false)
+
+    --Menu.Home.ConfigSystem.Upload:depend({Menu.LOGGEDIN, true}, {Menu.Home.ConfigSystem.Type, "Cloud"})
 end
 
 MenuUpdate()
 setup_aspect_ratio()
 
 GetNextUserID = function(callback)
-    FirebaseDB.read(DB_PATHS.SETTINGS .. "/last_user_id", function(success, id)
+    FireBase.read(PATHS.Settings .. "/last_user_id", function(success, id)
         if success and id then
             last_user_id = tonumber(id) or 1
         else
             last_user_id = 1
         end
         last_user_id = last_user_id + 1
-        FirebaseDB.write(DB_PATHS.SETTINGS .. "/last_user_id", last_user_id, function()
+        FireBase.write(PATHS.Settings .. "/last_user_id", last_user_id, function()
             callback(last_user_id)
         end)
     end)
@@ -1472,16 +1834,16 @@ local function updateOnlineStatus()
         }
     }
     
-    FirebaseDB.update(DB_PATHS.ONLINE_USERS, online_data, function(success, error)
+    FireBase.update(PATHS.OnlineUsers, online_data, function(success, error)
         if not success then
-            --client.log("[Firebase] Failed to update online status")
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Firebase\f<r>] Failed to update online status")))
         end
     end)
 end
 
 -- Function to get online users count using last_active
 local function getOnlineUsersCount(callback)
-    FirebaseDB.read(DB_PATHS.ONLINE_USERS, function(success, users)
+    FireBase.read(PATHS.OnlineUsers, function(success, users)
         if not success or not users or users == json.null then
             callback(0)
             return
@@ -1515,7 +1877,7 @@ Login = function(username, password, remember)
         end
     end
 
-    FirebaseDB.read(DB_PATHS.USERS .. "/" .. username, function(success, user)
+    FireBase.read(PATHS.Users .. "/" .. username, function(success, user)
         if not success then
             Menu.Auth.StatusLabel:override("Database error")
             return
@@ -1545,11 +1907,11 @@ Login = function(username, password, remember)
 
         -- If no SteamID is stored yet, store it now
         if not user.steamid then
-            FirebaseDB.update(DB_PATHS.USERS .. "/" .. username, {
+            FireBase.update(PATHS.Users .. "/" .. username, {
                 steamid = current_steamid
             }, function(update_success)
                 if not update_success then
-                    --client.log("[Firebase] Failed To Store HWID For User " .. username)
+                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Firebase\f<r>] Failed To Store HWID For User: \f<ez>%s", username)))
                 end
             end)
         end
@@ -1573,7 +1935,7 @@ Login = function(username, password, remember)
             TimesLoaded = (user.stats and user.stats.TimesLoaded or 0) + 1
         }
         
-        FirebaseDB.update(DB_PATHS.ONLINE_USERS, online_update, function(update_success, error)
+        FireBase.update(PATHS.OnlineUsers, online_update, function(update_success, error)
             if update_success then
                 Globals.UserData.LoggedIN = true
                 Globals.UserData.Username = username
@@ -1704,8 +2066,8 @@ client.set_event_callback("paint_ui", function()
 
     notification.OnLoad()
 
-    my.entity = entity.get_local_player()
-    my.valid = my.entity and entity.is_alive(my.entity)
+    LocalPlayer.Entity = entity.get_local_player()
+    LocalPlayer.Valid = LocalPlayer.Entity and entity.is_alive(LocalPlayer.Entity)
 
     WaterMark()
     RenderScreenLogs()
@@ -1768,7 +2130,7 @@ SaveStatsToFirebase = function()
         ["stats"] = Globals.UserData.Stats
     }
 
-    FirebaseDB.update(DB_PATHS.USERS .. "/" .. Globals.UserData.Username, update_data, function(success, error)
+    FireBase.update(PATHS.Users .. "/" .. Globals.UserData.Username, update_data, function(success, error)
         if success then
         else
         end
@@ -1780,7 +2142,7 @@ UpdateStats = function(kills, coins, loaded)
     
     Globals.UserData.Stats.KillCount = (Globals.UserData.Stats.KillCount or 0) + (kills or 0)
     Globals.UserData.Stats.Coins = (Globals.UserData.Stats.Coins or 0) + (coins or 0)
-    Globals.UserData.Stats.TimesLoaded = (Globals.UserData.Stats.TimesLoaded or 0) (loaded or 0)
+    Globals.UserData.Stats.TimesLoaded = (Globals.UserData.Stats.TimesLoaded or 0) + (loaded or 0)
     
     SaveStatsToFirebase()
 end
@@ -1852,28 +2214,28 @@ CleanupBackTrackCache = function()
 end
 
 UpdateNetvars = function(cmd)
-    my.entity = entity.get_local_player()
-    my.valid = my.entity and entity.is_alive(my.entity)
-    my.command_number = cmd.command_number
+    LocalPlayer.Entity = entity.get_local_player()
+    LocalPlayer.Valid = LocalPlayer.Entity and entity.is_alive(LocalPlayer.Entity)
+    LocalPlayer.CommandNumber = cmd.command_number
 
-    if my.valid then
-        local velocity = vector(entity.get_prop(my.entity, "m_vecVelocity"))
-        my.velocity = velocity:length2d()
-        my.origin = vector(entity.get_prop(my.entity, "m_vecOrigin"))
-        my.scoped = entity.get_prop(my.entity, "m_bIsScoped") == 1
-        my.weapon = entity.get_player_weapon(my.entity)
-        my.movetype = entity.get_prop(my.entity, "m_MoveType")
-        my.threat = client.current_threat()
-        my.jumping = cmd.in_jump == 1
-        my.in_score = cmd.in_score == 1
+    if LocalPlayer.Valid then
+        local velocity = vector(entity.get_prop(LocalPlayer.Entity, "m_vecVelocity"))
+        LocalPlayer.Velocity = velocity:length2d()
+        LocalPlayer.Origin = vector(entity.get_prop(LocalPlayer.Entity, "m_vecOrigin"))
+        LocalPlayer.Scoped = entity.get_prop(LocalPlayer.Entity, "m_bIsScoped") == 1
+        LocalPlayer.Weapon = entity.get_player_weapon(LocalPlayer.Entity)
+        LocalPlayer.MoveType = entity.get_prop(LocalPlayer.Entity, "m_MoveType")
+        LocalPlayer.Threat = client.current_threat()
+        LocalPlayer.Jumping = cmd.in_jump == 1
+        LocalPlayer.InScore = cmd.in_score == 1
 
 
-        if my.side == 0 then
-            my.side = (cmd.sidemove > 0) and 1 or (cmd.sidemove < 0) and -1 or 0
+        if LocalPlayer.Side == 0 then
+            LocalPlayer.Side = (cmd.sidemove > 0) and 1 or (cmd.sidemove < 0) and -1 or 0
         end
 
-        if not my.scoped then
-            my.side = 0
+        if not LocalPlayer.Scoped then
+            LocalPlayer.Side = 0
         end
     end
 end
@@ -2028,6 +2390,13 @@ client.set_event_callback('aim_fire', function(e)
 
     Logs[#Logs + 1] = e.id
 
+    local bt_ticks = 0
+    if e.record and e.record.simulation_time then
+        local current_time = globals.curtime()
+        local time_diff = current_time - e.record.simulation_time
+        bt_ticks = math.max(0, math.floor(time_diff / globals.tickinterval()))
+    end
+
     Shots[e.id] = {
         Id = e.id,
         Target = e.target,
@@ -2036,8 +2405,11 @@ client.set_event_callback('aim_fire', function(e)
         TimeMiss = nil,
         Hit = false,
         Miss = false,
-        Dmg = 0,
+        Damage = 0,
         HitGroup = 0,
+        Target = "",
+        HitChance = 0,
+        BT = 0,
         Reason = "",
         Alpha = 255
     }
@@ -2050,8 +2422,6 @@ client.set_event_callback('aim_hit', function(e)
         return
     end
 
-
-
     local s = Shots[e.id]
     if not s then 
         goto continue
@@ -2059,11 +2429,23 @@ client.set_event_callback('aim_hit', function(e)
     s.Hit = true
     s.Miss = false
     s.TimeHit = globals.curtime()
-    s.Dmg = e.damage
+    s.Damage = e.damage
     s.HitGroup = e.hitgroup
+    s.Target = e.target
+    s.HitChance = e.hit_chance
+    s.BT = globals.tickcount() - e.tick
+    s.LC = e.teleported
     s.Reason = ""
 
     ::continue::
+
+    if table.find(Menu.Miscellaneous.Logs.LogsType.value, "Console") then
+        if table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Hit") then
+            -- FIX: Use e.hitgroup directly instead of s.HitGroup
+            local Hitgroup = HitgroupNames[s.HitGroup + 1] or "Unknown"
+            utils.printc(pui.format(string.format("\f<z>[\f<ez>Orion Solutions\f<z>] \f<z>Hit " .. "\f<ez>" .. entity.get_player_name(e.target) .. "\f<z> In The " .. "\f<ez>" .. Hitgroup .. "\f<z> For " .. "\f<ez>" .. s.Damage .. "\f<z> Damage" .. (s.BT ~= 0 and ' (\f<ez>'..s.BT..'\f<z> BT)' or '') .. "\f<z> HC: " .. string.format('%.0f', s.HitChance) .. (s.LC ~= 0 and ' ('..'\f<z>LC)' or ''))))
+        end
+    end
 end)
 
 client.set_event_callback('aim_miss', function(e)
@@ -2075,14 +2457,23 @@ client.set_event_callback('aim_miss', function(e)
     if not s then 
         goto continue
     end
-    s.Hit = false
-    s.Miss = true
+    s.Hit = true
+    s.Miss = false
     s.TimeMiss = globals.curtime()
-    s.Dmg = e.damage or 0
-    s.HitGroup = e.hitgroup or 0
-    s.Reason = e.reason
+    s.Damage = e.damage
+    s.HitGroup = e.hitgroup
+    s.Target = e.target
+    s.HitChance = e.hit_chance
+    s.BT = globals.tickcount() - e.tick
+    s.Reason = ""
 
     ::continue::
+
+    if table.find(Menu.Miscellaneous.Logs.LogsType.value, "Console") then
+        if table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Miss") then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Miss")))
+        end
+    end
 end)
 
 -- Save on shutdown
@@ -2095,7 +2486,7 @@ client.set_event_callback("shutdown", function()
             [UserIdString] = json.null
         }
 
-        FirebaseDB.update(DB_PATHS.ONLINE_USERS, RemoveData, function(success, error) end)
+        FireBase.update(PATHS.OnlineUsers, RemoveData, function(success, error) end)
     end
 end)
 
@@ -2105,7 +2496,7 @@ client.delay_call(0, function()
         local ok, credentials = pcall(json.parse, saved)
         if ok and credentials and credentials.username and credentials.password then
             -- Check SteamID before auto-login
-            FirebaseDB.read(DB_PATHS.USERS .. "/" .. credentials.username, function(success, user)
+            FireBase.read(PATHS.Users .. "/" .. credentials.username, function(success, user)
                 if success and user then
                     local current_steamid = panorama.open().MyPersonaAPI.GetXuid()
                     if not user.steamid or user.steamid == current_steamid then
@@ -2115,7 +2506,7 @@ client.delay_call(0, function()
                         Menu.Auth.RememberMe:set(true)
                         Login(credentials.username, credentials.password, true)
                     else
-                        --client.log("[Orion] Auto-Login Failed: HWID Mismatch")
+                        utils.printc(pui.format(string.format("\f<r>[\f<ez>Auth\f<r>] \f<z>Auto-Login Failed: HWID Mismatch")))
                     end
                 end
             end)
@@ -2123,20 +2514,136 @@ client.delay_call(0, function()
     end
 end)
 
+SaveConfigToFirebase = function(name, encoded)
+    local username = Globals.UserData.Username or "Unknown"
+    local path = string.format("/configs/%s/%s", username, name)
+    local data = {
+        author = username,
+        cfg = encoded,
+        timestamp = Time.UnixTime()
+    }
+    FireBase.write(path, data, function(success)
+        if success then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Auth\f<r>] \f<z>Config: \f<ez>%s Uploaded To Cloud", name)))
+        else
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Auth\f<r>] \f<z>Failed To Upload Config To Cloud")))
+        end
+    end)
+end
+
+RefreshCloudConfigList = function()
+    if not Globals.UserData.LoggedIN then 
+        utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Not logged in, cannot refresh cloud configs")))
+        return 
+    end
+    
+    local username = Globals.UserData.Username or "Unknown"
+    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Refreshing cloud configs for user: \f<ez>%s", username)))
+
+    FireBase.read("/configs/" .. username, function(success, data)
+        if not success or not data or data == json.null then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud configs found for user: \f<ez>%s", username)))
+            
+            -- Clear the cloud configs array
+            db.db.configs["Cloud"] = {}
+            
+            -- Update UI with empty message
+            local displayList = {"No Cloud Configs"}
+            Menu.Home.ConfigSystem.List:update(displayList)
+            Menu.Home.ConfigSystem.List:set(0)
+            Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+            return
+        end
+
+        db.db.configs["Cloud"] = {} -- Reset and ensure it's an array
+        local displayList = {}
+
+        for cfgName, cfgData in pairs(data) do
+            if cfgData and cfgData.cfg then
+                -- Store as array element with name and config data
+                table.insert(db.db.configs["Cloud"], {cfgName, cfgData.cfg})
+                local author = cfgData.author or username
+                table.insert(displayList, string.format("[%s] ~ %s", author, cfgName))
+            end
+        end
+
+        -- Sort alphabetically by config name
+        table.sort(db.db.configs["Cloud"], function(a, b)
+            return (a[1] or "") < (b[1] or "")
+        end)
+
+        -- Update the listbox
+        if #displayList > 0 then
+            Menu.Home.ConfigSystem.List:update(displayList)
+            Menu.Home.ConfigSystem.List:set(0) -- Select first item
+            
+            local firstConfig = db.db.configs["Cloud"][1]
+            if firstConfig then
+                Menu.Home.ConfigSystem.Selected:set("Selected - \v" .. (firstConfig[1] or "Unknown"))
+            end
+
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded cloud configs: \f<ez>%d", #displayList)))
+        else
+            Menu.Home.ConfigSystem.List:update({"No Cloud Configs"})
+            Menu.Home.ConfigSystem.List:set(0)
+            Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud configs available")))
+        end
+    end)
+end
+
 local Config do 
     Config = pui.setup(Menu)
 
     Update = function()
         db.configs = {}
-        for i, cfgs in pairs(db.db.configs[Menu.Home.ConfigSystem.Type.value]) do
-            table.insert(db.configs, pui.format('[\v'..i..'\r] ' .. cfgs[1])) 
+        db.configs.authors = {}
+
+        local typeIndex = Menu.Home.ConfigSystem.Type:get()
+        local typeList = Menu.Home.ConfigSystem.Type:get_list()
+        local cfgType = typeList[typeIndex] or "Local"
+
+        for i, cfgs in pairs(db.db.configs[cfgType] or {}) do
+            table.insert(db.configs, pui.format('[\v' .. i .. '\r] ' .. cfgs[1]))
         end
+
         Menu.Home.ConfigSystem.List:update(db.configs)
     end Update()
 
     GetConfig = function()
-        local t = db.db.configs['Local'][ Menu.Home.ConfigSystem.List.value + 1]
-        return t[1], t[2]
+        -- Get config type - it's already the string value
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+        local listIndex = Menu.Home.ConfigSystem.List.value + 1
+
+        if cfgType == "Cloud" then
+            -- Cloud config logic
+            local cloudConfigs = db.db.configs["Cloud"] or {}
+        
+            local t = cloudConfigs[listIndex]
+        
+            if not t then
+                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud config found at index: \f<ez>%d", #listIndex)))
+                return nil, nil
+            end
+        
+            local name = t[1] or "Unknown"
+            local cfg = t[2] or ""
+            return name, cfg
+        else
+            -- Local config logic
+            local localConfigs = db.db.configs["Local"] or {}
+        
+            local t = localConfigs[listIndex]
+        
+            if not t then
+                 utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No local config found at index: \f<ez>%d", #listIndex)))
+                return nil, nil
+            end
+        
+            local name = t[1] or "Unknown"
+            local cfg = t[2] or ""
+            return name, cfg
+        end
     end
 
     Create = function(name, cfg)
@@ -2152,35 +2659,132 @@ local Config do
 
     Menu.Home.ConfigSystem.Delete:set_callback(function()
         local val = Menu.Home.ConfigSystem.List:get()
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
 
-        client.exec('playvol buttons\\button16 0.5')
-        table.remove(db.db.configs['Local'], val + 1)
-        Menu.Home.ConfigSystem.List:set(0)
-        db.save()
-        Update()
+        if cfgType == "Cloud" then
+            local cloudConfigs = db.db.configs["Cloud"] or {}
+            local configToDelete = cloudConfigs[val + 1]
+    
+            if not configToDelete then
+                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud config selected to delete!")))
+                return
+            end
+    
+            local configName = configToDelete[1] or "Unknown"
+            local username = Globals.UserData.Username or "Unknown"
+    
+            local path = string.format("/configs/%s/%s", username, configName)
+            FireBase.delete(path, function(success, response)
+                if success then
+                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Deleted cloud config: \f<ez>%s", configName)))
+                    RefreshCloudConfigList()
+                else
+                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Failed to delete cloud config: \f<ez>%s", configName)))
+                end
+            end)
+        else
+            local configName = db.db.configs['Local'][val + 1] and db.db.configs['Local'][val + 1][1] or ""
+    
+            if configName == "Default" then
+                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Cannot Delete Default config!")))
+                return
+            end
+    
+            table.remove(db.db.configs['Local'], val + 1)
+            Menu.Home.ConfigSystem.List:set(math.max(0, val - 1))
+            db.save()
+            Update()
+        end
     end)
 
     Menu.Home.ConfigSystem.Save:set_callback(function()
-        local cfg = base64.encode( json.stringify(Config:save()) )
-        db.db.configs['Local'][Menu.Home.ConfigSystem.List.value + 1][2] = cfg
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+        local cfg = base64.encode(json.stringify(Config:save()))
+        local listIndex = Menu.Home.ConfigSystem.List.value + 1
 
-        client.exec('playvol buttons\\button16 0.5')
-        db.save()
+        if cfgType == "Cloud" then
+            -- Handle cloud config saving
+            local cloudConfigs = db.db.configs["Cloud"] or {}
+            local configToUpdate = cloudConfigs[listIndex]
+        
+            if not configToUpdate then
+                utils.printc(pui.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud config selected to save!"))
+                return
+            end
+        
+            local configName = configToUpdate[1] or "Unknown"
+            local username = Globals.UserData.Username or "Unknown"
+        
+            -- Update the local cache first
+            db.db.configs["Cloud"][listIndex][2] = cfg
+        
+            -- Then update Firebase
+            local path = string.format("/configs/%s/%s", username, configName)
+            local data = {
+                author = username,
+                cfg = cfg,
+                timestamp = Time.UnixTime()
+            }
+        
+            FireBase.write(path, data, function(success, response)
+                if success then
+                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config '\f<ez>%s\f<z>' saved to cloud", configName)))
+                else
+                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Failed to save config '\f<ez>%s\f<z>' to cloud", configName)))
+                    -- Revert local cache on failure
+                    db.db.configs["Cloud"][listIndex][2] = configToUpdate[2]
+                end
+            end)
+        else
+            -- Handle local config saving (existing code)
+            if db.db.configs['Local'] and db.db.configs['Local'][listIndex] then
+                db.db.configs['Local'][listIndex][2] = cfg
+                db.save()
+                utils.printc(pui.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config saved locally"))
+            else
+                utils.printc(pui.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config not found for saving"))
+            end
+        end
     end)
 
     Menu.Home.ConfigSystem.Export:set_callback(function()
         local name, cfg = GetConfig()
         local text = string.format('OrionConfigs::%s::%s', name, cfg)
-        client.exec('playvol buttons\\button18 0.5')
         clipboard.set(text)
     end)
 
-    Load = function(self, cfg)
+    Load = function(self)
+        -- Get the ACTUAL config type
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+
         local name, config = GetConfig()
-        local decrypted = json.parse( base64.decode(config) )
-        Config:load(decrypted, self.name == "Load AA" and "AntiAim" or nil)
-        client.exec('playvol buttons\\button17 0.5')
-        db.save()
+        if not name or not config then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No config selected to load!")))
+            return
+        end
+
+        utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loading \f<ez> %s \f<z>Config: \f<ez>%s", cfgType, name)))
+
+        -- Determine if this is Load AA or regular Load
+        local isLoadAA = (self == Menu.Home.ConfigSystem.LoadAA)
+    
+        -- Try to decode and load
+        local success, decrypted = pcall(json.parse, base64.decode(config))
+        if success and decrypted then
+            if isLoadAA then
+                Config:load(decrypted, "AntiAim")
+                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded Anti-Aim only")))
+            else
+                Config:load(decrypted)
+                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded full config")))
+            end
+        
+            if cfgType == "Local" then
+                db.save()
+            end
+        else
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<r>Failed to parse config data!")))
+        end
     end
 
     Menu.Home.ConfigSystem.Import:set_callback(function()
@@ -2196,27 +2800,111 @@ local Config do
     Menu.Home.ConfigSystem.Create:set_callback(Create)
 
     Menu.Home.ConfigSystem.List:set_callback(function(self)
-        local table = {}
-        if Menu.Home.ConfigSystem.Type.value == 'Cloud' then
-            for i=1, #db.db.configs['Cloud'] do
-                table[i] = i == 1 and db.db.configs['Cloud'][1] or pui.format('\r[\v'..db.configs.authors[i - 1]..'\r] ~ '.. (i == self.value + 1 and '\v' or '') .. db.db.configs['Cloud'][i])
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+    
+        if cfgType == "Cloud" then
+            local cloudConfigs = db.db.configs["Cloud"] or {}
+            local selectedConfig = cloudConfigs[self.value + 1]
+            if selectedConfig then
+                local name = selectedConfig[1] or "Unknown"
+                Menu.Home.ConfigSystem.Selected:set("Selected - \v" .. name)
+            else
+                Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
             end
         else
-            table = db.configs
+            local localConfigs = db.db.configs["Local"] or {}
+            local selectedConfig = localConfigs[self.value + 1]
+            if selectedConfig then
+                local name = selectedConfig[1] or "Unknown"
+                Menu.Home.ConfigSystem.Selected:set("Selected - \v" .. name)
+            else
+                Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+            end
         end
-        self:update(table)
-        Menu.Home.ConfigSystem.Selected:set("Selected - \v"..table[self.value + 1])
-        client.exec('playvol buttons\\lightswitch2 0.5')
     end, true)
+
+    -- Upload to Cloud Button Callback (using GetConfig)
+    Menu.Home.ConfigSystem.Upload:set_callback(function()
+        if not Globals.UserData.LoggedIN then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>You must be logged in to upload configs!")))
+            return
+        end
+
+        local name, cfg = GetConfig()
+        if not name or name == "" then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No config selected to upload!")))
+            return
+        end
+    
+        -- Prevent uploading Default config
+        if name == "Default" then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Cannot upload Default config!")))
+            return
+        end
+    
+        if not cfg or cfg == "" then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config data missing for: \f<ez>%s", name)))
+            return
+        end
+
+        local username = Globals.UserData.Username or "Unknown"
+        local path = string.format("/configs/%s/%s", username, name)
+
+        local data = {
+            author = username,
+            cfg = cfg,
+            timestamp = Time.UnixTime()
+        }
+
+        FireBase.write(path, data, function(success, response)
+            if success then
+                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Successfully uploaded config: \f<ez>%s", name)))
+            else
+                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Failed to upload config: \f<ez>%s' — %s", name, tostring(response))))
+            end
+        end)
+    end)
+
+    Menu.Home.ConfigSystem.Type:set_callback(function(this)
+        local currentValue = this.value
+        local cfgType = currentValue or "Local"  -- Since value is already the string
+
+        if cfgType == "Cloud" then
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Switching to Cloud configs...")))
+            RefreshCloudConfigList()
+        else
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Switching to Local configs...")))
+            local localList = {}
+
+            -- Format: [index] ConfigName
+            for i = 1, #db.db.configs["Local"] do
+                local cfg = db.db.configs["Local"][i]
+                local cfgName = type(cfg) == "table" and (cfg[1] or "Unnamed") or tostring(cfg)
+                table.insert(localList, string.format("[%d] %s", i, cfgName))
+            end
+
+            -- Update the List UI for Local mode
+            Menu.Home.ConfigSystem.List:update(localList)
+
+            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded \f<ez>%d \f<z>Local Configs:", #localList)))
+        end
+
+       -- Reset selection text
+        Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+    end)
 end
 
 --Used If I Ever Have To Clear A Path :)
 --client.delay_call(1, function()
---    FirebaseDB.update(DB_PATHS.USERS, json.null, function(success, error)
+--    FireBase.update(PATHS.Users, json.null, function(success, error)
 --        if success then
---            client.log("[Orion] Removed INVITES path from database on launch")
+--            client.log("[Orion] Removed Invites path from database on launch")
 --        else
---            client.log("[Orion] Failed to remove INVITES path: " .. (error or "unknown"))
+--            client.log("[Orion] Failed to remove Invites path: " .. (error or "unknown"))
 --        end
 --    end)
 --end)
+
+do 
+    drag.on_config_load()
+end
