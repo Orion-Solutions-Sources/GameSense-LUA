@@ -1,43 +1,44 @@
-local http = require "gamesense/http"
-local pui = require "gamesense/pui"
-local color = require('gamesense/color')
-local msgpack = require("gamesense/msgpack")
-local base64 = require("gamesense/base64")
-local json = require "json"
-local ffi = require "ffi"
-local images = require "gamesense/images"
-local vector = require "vector"
-local clipboard = require "gamesense/clipboard"
+local http = require 'gamesense/http'
+local pui = require 'gamesense/pui'
+local color = require 'gamesense/color'
+local msgpack = require 'gamesense/msgpack'
+local base64 = require 'gamesense/base64'
+local json = require 'json'
+local ffi = require 'ffi'
+local images = require 'gamesense/images'
+local vector = require 'vector'
+local clipboard = require 'gamesense/clipboard'
+local weapons = require 'gamesense/csgo_weapons'
 
-table.clear = require "table.clear"
+table.clear = require 'table.clear'
 table.ifind = function (t, j)  for i = 1, #t do if t[i] == j then return i end end  end
 table.append = function (t, ...)  for i, v in ipairs{...} do table.insert(t, v) end  end
 table.mfind = function (t, j)  for i = 1, table.maxn(t) do if t[i] == j then return i end end  end
 table.find = function (t, j)  for k, v in pairs(t) do if v == j then return k end end return false  end
 table.filter = function (t)  local res = {} for i = 1, table.maxn(t) do if t[i] ~= nil then res[#res+1] = t[i] end end return res  end
-table.copy = function (o) if type(o) ~= "table" then return o end local res = {} for k, v in pairs(o) do res[table.copy(k)] = table.copy(v) end return res end
+table.copy = function (o) if type(o) ~= 'table' then return o end local res = {} for k, v in pairs(o) do res[table.copy(k)] = table.copy(v) end return res end
 table.ihas = function (t, ...) local arg = {...} for i = 1, table.maxn(t) do for j = 1, #arg do if t[i] == arg[j] then return true end end end return false end
 table.distribute = function (t, r, k)  local result = {} for i, v in ipairs(t) do local n = k and v[k] or i result[n] = r == nil and i or v[r] end return result  end
-table.place = function (t, path, place)  local p = t for i, v in ipairs(path) do if type(p[v]) == "table" then p = p[v] else p[v] = (i < #path) and {} or place  p = p[v]  end end return t  end
+table.place = function (t, path, place)  local p = t for i, v in ipairs(path) do if type(p[v]) == 'table' then p = p[v] else p[v] = (i < #path) and {} or place  p = p[v]  end end return t  end
 
 local FirebaseConfig = {
-    apiKey = "AIzaSyBkx75L5S_QWWdKXPR10xTyjEOpTFIIc3g",
-    projectId = "orion-solutions-68199",
-    databaseURL = "https://orion-solutions-68199-default-rtdb.europe-west1.firebasedatabase.app"
+    apiKey = 'AIzaSyBkx75L5S_QWWdKXPR10xTyjEOpTFIIc3g',
+    projectId = 'orion-solutions-68199',
+    databaseURL = 'https://orion-solutions-68199-default-rtdb.europe-west1.firebasedatabase.app'
 }
 
 FireBaseRequest = function(endpoint, method, data, callback)
-    local method_l = string.lower(tostring(method or "get"))
-    local url = FirebaseConfig.databaseURL .. endpoint .. ".json?auth=" .. FirebaseConfig.apiKey
+    local method_l = string.lower(tostring(method or 'get'))
+    local url = FirebaseConfig.databaseURL .. endpoint .. '.json?auth=' .. FirebaseConfig.apiKey
 
     local options = {
         headers = {
-            ["Content-Type"] = "application/json"
+            ['Content-Type'] = 'application/json'
         },
     }
 
-    if method_l == "get" and data ~= nil then
-        if type(data) == "table" then
+    if method_l == 'get' and data ~= nil then
+        if type(data) == 'table' then
             options.params = data
         end
     elseif data ~= nil then
@@ -47,14 +48,14 @@ FireBaseRequest = function(endpoint, method, data, callback)
     local http_fn = http[method_l] or http.request
     local cb = function(success, response)
         if not success then
-            callback(false, "HTTP request failed")
+            callback(false, 'HTTP request failed')
             return
         end
 
         local status = response.status or 0
         local result
 
-        if response.body and type(response.body) == "string" then
+        if response.body and type(response.body) == 'string' then
             local ok, parsed = pcall(json.parse, response.body)
             if ok then
                 result = parsed
@@ -68,7 +69,7 @@ FireBaseRequest = function(endpoint, method, data, callback)
         if status >= 200 and status < 300 then
             callback(true, result)
         else
-            callback(false, result and (result.error or result) or response.status_message or "Unknown error")
+            callback(false, result and (result.error or result) or response.status_message or 'Unknown error')
         end
     end
 
@@ -77,19 +78,19 @@ end
 
 local FireBase = {
     read = function(path, callback)
-        FireBaseRequest(path, "GET", nil, callback)
+        FireBaseRequest(path, 'GET', nil, callback)
     end,
     
     write = function(path, data, callback)
-        FireBaseRequest(path, "PUT", data, callback)
+        FireBaseRequest(path, 'PUT', data, callback)
     end,
     
     update = function(path, data, callback)
-        FireBaseRequest(path, "PATCH", data, callback)
+        FireBaseRequest(path, 'PATCH', data, callback)
     end,
     
     delete = function(path, callback)
-        FireBaseRequest(path, "DELETE", nil, callback)
+        FireBaseRequest(path, 'DELETE', nil, callback)
     end
 }
 
@@ -100,79 +101,80 @@ local Time = {
 
     RealTime = function()
         local hours, minutes = client.system_time()
-        return string.format("%02d:%02d", hours, minutes)
+        return string.format('%02d:%02d', hours, minutes)
     end
 }
 
 local References = {
 	Rage = {
 		Aimbot = {
-			ForceBaim = pui.reference("RAGE", "Aimbot", "Force body aim"),
-			ForceSafePoint = pui.reference("RAGE", "Aimbot", "Force safe point"),
-			HitChance = pui.reference("RAGE", "Aimbot", "Minimum hit chance"),
-			Damage = pui.reference("RAGE", "Aimbot", "Minimum damage"),
-			DamageOverride = { pui.reference("RAGE", "Aimbot", "Minimum damage override") },
-			DoubleTap = { pui.reference("RAGE", "Aimbot", "Double tap") },
-			DoubleTapFakeLagLimit = { pui.reference("RAGE", "Aimbot", "Double tap fake lag limit") },
+            Enabled = pui.reference('RAGE', 'Aimbot', 'Enabled'),
+			ForceBaim = pui.reference('RAGE', 'Aimbot', 'Force body aim'),
+			ForceSafePoint = pui.reference('RAGE', 'Aimbot', 'Force safe point'),
+			HitChance = pui.reference('RAGE', 'Aimbot', 'Minimum hit chance'),
+			Damage = pui.reference('RAGE', 'Aimbot', 'Minimum damage'),
+			DamageOverride = { pui.reference('RAGE', 'Aimbot', 'Minimum damage override') },
+			DoubleTap = { pui.reference('RAGE', 'Aimbot', 'Double tap') },
+			DoubleTapFakeLagLimit = { pui.reference('RAGE', 'Aimbot', 'Double tap fake lag limit') },
 		},
 		Other = {
-			QuickPeek = pui.reference("RAGE", "Other", "Quick peek assist"),
-			Duck = pui.reference("RAGE", "Other", "Duck peek assist"),
-			LogMisses = pui.reference("RAGE", "Other", "Log misses due to spread"),
-            AntiAimCorrection = pui.reference("RAGE", "Other", "Anti-Aim Correction"),
+			QuickPeek = pui.reference('RAGE', 'Other', 'Quick peek assist'),
+			Duck = pui.reference('RAGE', 'Other', 'Duck peek assist'),
+			LogMisses = pui.reference('RAGE', 'Other', 'Log misses due to spread'),
+            AntiAimCorrection = pui.reference('RAGE', 'Other', 'Anti-Aim Correction'),
 		}
 	},
 	AntiAim = {
 		Angles = {
-			Enable = pui.reference("AA", "Anti-Aimbot angles", "Enabled"),
-			Pitch = { pui.reference("AA", "Anti-Aimbot angles", "Pitch") },
-			Yaw = { pui.reference("AA", "Anti-Aimbot angles", "Yaw") },
-			YawBase = pui.reference("AA", "Anti-Aimbot angles", "Yaw base"),
-			YawJitter = { pui.reference("AA", "Anti-Aimbot angles", "Yaw jitter") },
-			BodyYaw = { pui.reference("AA", "Anti-Aimbot angles", "Body yaw") },
-			EdgeYaw = pui.reference("AA", "Anti-Aimbot angles", "Edge yaw"),
-			FreestandingBodyYaw = pui.reference("AA", "Anti-Aimbot angles", "Freestanding body yaw"),
-			Freestanding = pui.reference("AA", "Anti-Aimbot angles", "Freestanding"),
-			Roll = pui.reference("AA", "Anti-Aimbot angles", "Roll"),
+			Enable = pui.reference('AA', 'Anti-Aimbot angles', 'Enabled'),
+			Pitch = { pui.reference('AA', 'Anti-Aimbot angles', 'Pitch') },
+			Yaw = { pui.reference('AA', 'Anti-Aimbot angles', 'Yaw') },
+			YawBase = pui.reference('AA', 'Anti-Aimbot angles', 'Yaw base'),
+			YawJitter = { pui.reference('AA', 'Anti-Aimbot angles', 'Yaw jitter') },
+			BodyYaw = { pui.reference('AA', 'Anti-Aimbot angles', 'Body yaw') },
+			EdgeYaw = pui.reference('AA', 'Anti-Aimbot angles', 'Edge yaw'),
+			FreestandingBodyYaw = pui.reference('AA', 'Anti-Aimbot angles', 'Freestanding body yaw'),
+			Freestanding = pui.reference('AA', 'Anti-Aimbot angles', 'Freestanding'),
+			Roll = pui.reference('AA', 'Anti-Aimbot angles', 'Roll'),
 		},
 		FakeLag = {
-			Enable = pui.reference("AA", "Fake lag", "Enabled"),
-			Amount = pui.reference("AA", "Fake lag", "Amount"),
-			Variance = pui.reference("AA", "Fake lag", "Variance"),
-			Limit = pui.reference("AA", "Fake lag", "Limit"),
+			Enable = pui.reference('AA', 'Fake lag', 'Enabled'),
+			Amount = pui.reference('AA', 'Fake lag', 'Amount'),
+			Variance = pui.reference('AA', 'Fake lag', 'Variance'),
+			Limit = pui.reference('AA', 'Fake lag', 'Limit'),
 		},
 		Other = {
-			SlowWalk = pui.reference("AA", "Other", "Slow motion"),
-			Legs = pui.reference("AA", "Other", "Leg movement"),
-			OnShot = pui.reference("AA", "Other", "On shot anti-aim"),
-			FakePeek = pui.reference("AA", "Other", "Fake peek"),
+			SlowWalk = pui.reference('AA', 'Other', 'Slow motion'),
+			Legs = pui.reference('AA', 'Other', 'Leg movement'),
+			OnShot = pui.reference('AA', 'Other', 'On shot anti-aim'),
+			FakePeek = pui.reference('AA', 'Other', 'Fake peek'),
 		}
 	},
 	Miscellaneous = {
-		Clantag = pui.reference("MISC", "Miscellaneous", "Clan tag spammer"),
-		LogDamage = pui.reference("MISC", "Miscellaneous", "Log damage dealt"),
-		PingSpike = pui.reference("MISC", "Miscellaneous", "Ping spike"),
+		Clantag = pui.reference('MISC', 'Miscellaneous', 'Clan tag spammer'),
+		LogDamage = pui.reference('MISC', 'Miscellaneous', 'Log damage dealt'),
+		PingSpike = pui.reference('MISC', 'Miscellaneous', 'Ping spike'),
 		Settings = {
-			DPI = pui.reference("MISC", "Settings", "DPI scale"),
-			MenuColor = pui.reference("MISC", "Settings", "Menu color"),
+			DPI = pui.reference('MISC', 'Settings', 'DPI scale'),
+			MenuColor = pui.reference('MISC', 'Settings', 'Menu color'),
 		},
 		Movement = {
-			AirStrafe = pui.reference("Misc", "Movement", "Air strafe")
+			AirStrafe = pui.reference('Misc', 'Movement', 'Air strafe')
 		}
 	},
     PList = {
-        ResetAll = pui.reference("Players", "Players", "Reset All"),
-        ForceBodyYaw = pui.reference("Players", "Adjustments", "Force Body Yaw"),
-        CorrectionActive = pui.reference("Players", "Adjustments", "Correction Active"),
+        ResetAll = pui.reference('Players', 'Players', 'Reset All'),
+        ForceBodyYaw = pui.reference('Players', 'Adjustments', 'Force Body Yaw'),
+        CorrectionActive = pui.reference('Players', 'Adjustments', 'Correction Active'),
     }
 }
 
 local PATHS = {
-    Users = "/users",
-    Invites = "/invites",
-    Settings = "/settings",
-    OnlineUsers = "/online_users",
-    BannedUsers = "/banned_users"
+    Users = '/users',
+    Invites = '/invites',
+    Settings = '/settings',
+    OnlineUsers = '/online_users',
+    BannedUsers = '/banned_users'
 }
 
 local Globals = {
@@ -181,7 +183,7 @@ local Globals = {
         Username = nil,
         UserID = nil,
         IsAdmin = false,
-        Version = nil,
+        Version = 'Live',
         LastUpdateTime = 0,
         LoginTime = nil,
         Stats = {  -- Add stats section
@@ -205,13 +207,13 @@ local color do
     local helpers = {
         RGBtoHEX = a(function (col, short)
             if short then
-                return string.format("%02X%02X%02X", col.r, col.g, col.b)
+                return string.format('%02X%02X%02X', col.r, col.g, col.b)
             else
-                return string.format("%02X%02X%02X%02X", col.r, col.g, col.b, col.a)
+                return string.format('%02X%02X%02X%02X', col.r, col.g, col.b, col.a)
             end
         end),
         HEXtoRGB = a(function (hex)
-            hex = string.gsub(hex, "^#", "")
+            hex = string.gsub(hex, '^#', '')
             return tonumber(string.sub(hex, 1, 2), 16),
                    tonumber(string.sub(hex, 3, 4), 16),
                    tonumber(string.sub(hex, 5, 6), 16),
@@ -234,7 +236,7 @@ local color do
 		end,
 	}	mt.__index = mt
 
-	create = ffi.metatype(ffi.typeof("struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; }"), mt)
+	create = ffi.metatype(ffi.typeof('struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; }'), mt)
 
     color = setmetatable({
         rgb = a(function (r,g,b,a)
@@ -247,14 +249,14 @@ local color do
         end)
     }, {
         __call = a(function (self, r, g, b, a)
-            return type(r) == "string" and self.hex(r) or self.rgb(r, g, b, a)
+            return type(r) == 'string' and self.hex(r) or self.rgb(r, g, b, a)
         end),
     })
 end
 
 local colors = {
-	hex		= "\a7676FF",
-	accent	= color.hex("7676FF"),
+	hex		= '\aafafff',
+	accent	= color.hex('afafff'),
 	back	= color.rgb(23, 26, 28),
 	dark	= color.rgb(5, 6, 8),
 	white	= color.rgb(255),
@@ -277,18 +279,18 @@ local utils do
     end
 
     utils.to_hex = function(color, cut)
-        return string.format("%02X%02X%02X".. (cut and '' or "%02X"), color.r, color.g, color.b, color.a or 255)
+        return string.format('%02X%02X%02X'.. (cut and '' or '%02X'), color.r, color.g, color.b, color.a or 255)
     end
 
     utils.to_rgb = function(hex)
-        hex = hex:gsub("^#", "")
+        hex = hex:gsub('^#', '')
         return color(tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16), tonumber(hex:sub(7, 8), 16) or 255)
     end
 
     utils.printc = function(text)
         local result = {}
 
-        for color, content in text:gmatch("\a([A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9])([^%z\a]*)") do
+        for color, content in text:gmatch('\a([A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9])([^%z\a]*)') do
             table.insert(result, {color, content})
         end
         local len = #result
@@ -338,143 +340,25 @@ local utils do
     end
 end
 
-local drag do
-    local is_menu_visible = false
-    local is_mouse_held_before_hover = false
-    local mouse = vector()
-
-    drag = {}
-    drag.windows = {}
-
-    function drag.on_config_load()
-        for _, point in pairs(drag.windows) do
-            point.position = vector(point.ui_callbacks.x:get()*screen.size.x/1000, point.ui_callbacks.y:get()*screen.size.y/1000)
-        end
-    end
-
-    function drag.register(position, size, global_name, ins_function, limits, outline)
-        local data = {
-            size = size,
-            is_dragging = false,
-            drag_position = vector(),
-            is_mouse_held_before_hover = false, -- теперь локально для каждого элемента
-            global_name = global_name,
-            ins_function = ins_function,
-            ui_callbacks = {x = position.x, y = position.y},
-            limits = limits and {x={min=limits[1], max=limits[2]}, y={min=limits[3],max=limits[4]}} or nil,
-            outline = outline == nil and true or outline
-        }
-        data.position = vector(data.ui_callbacks.x.value/1000*screen.size.x - data.size.x/2, data.ui_callbacks.y.value/1000*screen.size.y - data.size.y/2)
-         
-        table.insert(drag.windows, data)
-        return setmetatable(data, { __index = drag })
-    end
-    
-    
-    function drag:limit_positions(table)
-        self.position.x = math.max(table and table.x.min or 0, math.min(self.position.x, table and table.x.max or screen.size.x - self.size.x))
-        self.position.y = math.max(table and table.y.min or 0, math.min(self.position.y, table and table.y.max or screen.size.y - self.size.y))
-    end
-    
-    function drag:is_in_area(mouse_position)
-        return mouse_position.x >= self.position.x and mouse_position.x <= self.position.x + self.size.x and 
-               mouse_position.y >= self.position.y and mouse_position.y <= self.position.y + self.size.y
-    end
-    
-    function drag:update(...)
-        if is_menu_visible then
-            if self.outline then
-                utils.rectangle_outline(self.position.x, self.position.y, self.size.x, self.size.y, 255, 255, 255, 100)
-            end
-            local is_in_area = self:is_in_area(mouse)
-            local is_key_pressed = client.key_state(0x01)
-    
-            if is_in_area and client.key_state(0x02) then
-                self.position.x = (screen.size.x - self.size.x) / 2
-                self.ui_callbacks.x:set(math.floor(self.position.x / screen.size.x * 1000))
-            end
-    
-            if is_key_pressed and not self.is_dragging and not is_in_area then
-                self.is_mouse_held_before_hover = true
-            end
-    
-            if (is_in_area or self.is_dragging) and is_key_pressed and not self.is_mouse_held_before_hover then
-                if not self.is_dragging then
-                    self.is_dragging = true
-                    self.drag_position = mouse - self.position
-                else
-                    self.position = mouse - self.drag_position
-                    self:limit_positions(self.limits)
-                    self.ui_callbacks.x:set(math.floor(self.position.x/screen.size.x*1000))
-                    self.ui_callbacks.y:set(math.floor(self.position.y/screen.size.y*1000))
-                end
-            elseif not is_key_pressed then
-                self.is_dragging = false
-                self.drag_position = vector()
-                self.is_mouse_held_before_hover = false
-            end
-        end
-        self.ins_function(self, ...)
-    end
-    
-    local function block(cmd)
-        cmd.in_attack = false
-        cmd.in_attack2 = false
-    end
-    
-    local function mouse_input()
-        height = vector(renderer.measure_text('d', '1')).y
-        is_menu_visible = ui.is_menu_open()
-        if is_menu_visible then
-            mouse = vector(ui.mouse_position())
-            local is_key_pressed = client.key_state(0x01)
-            local in_area = false
-            if is_menu_visible then
-                for _, window in pairs(drag.windows) do
-                    if window.is_dragging or window:is_in_area(mouse) then
-                        in_area = true
-                        break
-                    end
-                end
-            end
-            
-            if in_area then
-                client.set_event_callback("setup_command", block)
-            else
-                client.unset_event_callback("setup_command", block)
-            end
-
-            
-            if not is_key_pressed then
-                is_mouse_held_before_hover = false
-            end
-            
-            return not in_area
-        end
-    end
-    
-    client.set_event_callback("paint", mouse_input)
-end 
-
 local GUI = {
 	Header = function(name, group) 
 		r = {}
-		r[#r+1] = group:label("\f<c> "..name)
-		r[#r+1] = group:label("\f<silent>‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾") 
+		r[#r+1] = group:label('\f<c> '..name)
+		r[#r+1] = group:label('\f<silent>‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾') 
 		return r
 	end,
 	Feature = function (main, settings)
-	    main = main.__type == "pui::element" and {main} or main
+	    main = main.__type == 'pui::element' and {main} or main
 		local feature, g_depend = settings(main[1])
 
 	    for k, v in pairs(feature) do
 			v:depend({main[1], g_depend})
 		end
-		feature[main.key or "on"] = main[1]
+		feature[main.key or 'on'] = main[1]
 
 		return feature
 	end,
-	Space = function(group) group:label("\n") end,
+	Space = function(group) group:label('\n') end,
     Lock = function (id, item, to, min)
 		if _LEVEL < (min or 2) then
 			local cb = function (this) client.delay_call(.1, function() this:set(to or false) end) end
@@ -487,119 +371,125 @@ local GUI = {
 }
 
 local Groups = {
-    Angles = pui.group("AA", "Anti-aimbot angles"),
-    FakeLag = pui.group("AA", "Fake lag"),
-    Other = pui.group("AA", "Other"),
-    LuaB = pui.group("LUA", "B"),
-	LuaA = pui.group("LUA", "A")
+    Angles = pui.group('AA', 'Anti-aimbot angles'),
+    FakeLag = pui.group('AA', 'Fake lag'),
+    Other = pui.group('AA', 'Other'),
+    LuaB = pui.group('LUA', 'B'),
+	LuaA = pui.group('LUA', 'A')
 }
 
-pui.macros.silent = "\aCDCDCD40"
-pui.macros.p = "\a7676FF•\r"
-pui.macros.c = "\v•\r" 
+pui.macros.silent = '\aCDCDCD40'
+pui.macros.p = '\a7676FF•\r'
+pui.macros.c = '\v•\r' 
 pui.macros.orion = colors.hex
 pui.macros.orionb = string.sub(colors.hex, 2, 7)
-pui.macros.r = '\aC8C8C8'
-pui.macros.ez = '\aafafff'
 pui.macros.z = '\affffff'
+pui.macros.red = '\aff0000'
+pui.macros.green = '\a00ff00'
 
 local PrimaryWeapons = {
-    "-", 
-    "AWP", 
-    "SCAR20/G3SG1", 
-    "Scout", 
-    "M4/AK47", 
-    "Famas/Galil", 
-    "Aug/SG553", 
-    "M249/Negev", 
-    "Mag7/SawedOff", 
-    "Nova", 
-    "XM1014", 
-    "MP9/Mac10", 
-    "UMP45", 
-    "PPBizon", 
-    "MP7"
+    '-', 
+    'AWP', 
+    'SCAR20/G3SG1', 
+    'Scout', 
+    'M4/AK47', 
+    'Famas/Galil', 
+    'Aug/SG553', 
+    'M249/Negev', 
+    'Mag7/SawedOff', 
+    'Nova', 
+    'XM1014', 
+    'MP9/Mac10', 
+    'UMP45', 
+    'PPBizon', 
+    'MP7'
 }
 
 local SecondaryWeapons = {
-    "-", 
-    "CZ75/Tec9/FiveSeven", 
-    "P250", 
-    "Deagle/Revolver", 
-    "Dualies"
+    '-', 
+    'CZ75/Tec9/FiveSeven', 
+    'P250', 
+    'Deagle/Revolver', 
+    'Dualies'
 }
 
 local Grenades = {
-    "HE Grenade", 
-    "Molotov", 
-    "Smoke"
+    'HE Grenade', 
+    'Molotov', 
+    'Smoke'
 }
 
 local Utilities = {
-    "Armor", 
-    "Helmet", 
-    "Zeus", 
-    "Defuser"
+    'Armor', 
+    'Helmet', 
+    'Zeus', 
+    'Defuser'
 }
 
 local Commands = {
-	["AWP"] = "buy awp",
-	["SCAR20/G3SG1"] = "buy scar20",
-	["Scout"] = "buy ssg08",
-	["M4/AK47"] = "buy m4a1",
-	["Famas/Galil"] = "buy famas",
-	["Aug/SG553"] = "buy aug",
-    ["M249"] = "buy m249",
-    ["Negev"] = "buy negev",
-	["Mag7/SawedOff"] = "buy mag7",
-	["Nova"] = "buy nova",
-	["XM1014"] = "buy xm1014",
-	["MP9/Mac10"] = "buy mp9",
-	["UMP45"] = "buy ump45",
-	["PPBizon"] = "buy bizon",
-	["MP7"] = "buy mp7",
-	["CZ75/Tec9/FiveSeven"] = "buy tec9",
-	["P250"] = "buy p250",
-	["Deagle/Revolver"] = "buy deagle",
-	["Dualies"] = "buy elite",
-	["HE Grenade"] = "buy hegrenade",
-	["Molotov"] = "buy molotov",
-	["Smoke"] = "buy smokegrenade",
-	["Flash"] = "buy flashbang",
-	["Decoy"] = "buy decoy",
-	["Armor"] = "buy vest",
-	["Helmet"] = "buy vesthelm",
-	["Zeus"] = "buy taser 34",
-	["Defuser"] = "buy defuser"
+	['AWP'] = 'buy awp',
+	['SCAR20/G3SG1'] = 'buy scar20',
+	['Scout'] = 'buy ssg08',
+	['M4/AK47'] = 'buy m4a1',
+	['Famas/Galil'] = 'buy famas',
+	['Aug/SG553'] = 'buy aug',
+    ['M249'] = 'buy m249',
+    ['Negev'] = 'buy negev',
+	['Mag7/SawedOff'] = 'buy mag7',
+	['Nova'] = 'buy nova',
+	['XM1014'] = 'buy xm1014',
+	['MP9/Mac10'] = 'buy mp9',
+	['UMP45'] = 'buy ump45',
+	['PPBizon'] = 'buy bizon',
+	['MP7'] = 'buy mp7',
+	['CZ75/Tec9/FiveSeven'] = 'buy tec9',
+	['P250'] = 'buy p250',
+	['Deagle/Revolver'] = 'buy deagle',
+	['Dualies'] = 'buy elite',
+	['HE Grenade'] = 'buy hegrenade',
+	['Molotov'] = 'buy molotov',
+	['Smoke'] = 'buy smokegrenade',
+	['Flash'] = 'buy flashbang',
+	['Decoy'] = 'buy decoy',
+	['Armor'] = 'buy vest',
+	['Helmet'] = 'buy vesthelm',
+	['Zeus'] = 'buy taser 34',
+	['Defuser'] = 'buy defuser'
 }
 
 local LogsType = {
-    "Screen",
-    "Console"
+    'Screen',
+    'Console'
 }
 
 local LogsOption = {
-    "Hit",
-    "Miss",
-    "Casino",
-    "Config Changes (Soon)"
+    'Hit',
+    'Miss',
+    'Casino',
+    'Config Changes (Soon)'
 }
 
 local ResolverModes = {
-    "Math.Random",
-    "Soon"
+    'Math.Random',
+    'Soon'
 }
 
-local ConfigType = {"Local", "Cloud"}
+local FakeLagAmount = {
+    'Dynamic',
+    'Maximum',
+    'Fluctuate'
+}
+
+local ConfigType = {'Local', 'Cloud'}
 
 local ToolTips = {
-    BackTrack = {[2] = "Default", [7] = "Maximum"},
-    AspectRatios = { {125, "5:4"}, {133, "4:3"}, {150, "3:2"}, {160, "16:10"}, {178, "16:9"}, {200, "2:1"}, }
+    BackTrack = {[2] = 'Default', [7] = 'Maximum'},
+    AspectRatios = { {125, '5:4'}, {133, '4:3'}, {150, '3:2'}, {160, '16:10'}, {178, '16:9'}, {200, '2:1'}, }
 }
 
 local NILFN = function()end
 
-local TabNames = {"Home", "Rage", "Anti-Aim", "Visuals", "Miscellaneous", "Casino"}
+local TabNames = {'Home', 'Rage', 'Anti-Aim', 'Visuals', 'Miscellaneous', 'Casino'}
 
 local db do
     db = {}
@@ -624,165 +514,484 @@ local db do
         end
     end
 
-    local DefaultConfig = "eyJDYXNpbm8iOnsiQmV0QW1vdW50IjoiIiwiR2FtZSI6IkNvaW4gRmxpcCJ9LCJUYWJzIjoiSG9tZSIsIlZpc3VhbHMiOnsiQXNwZWN0UmF0aW8iOnsib24iOnRydWUsIlJhdGlvIjoxMzN9LCJCdWxsZXRUcmFjZXIiOnsiQ29sb3IiOiIjNzY3NkZGRkYiLCJvbiI6dHJ1ZX0sIldhdGVyTWFyayI6dHJ1ZX0sIkxPR0dFRElOIjp0cnVlLCJNaXNjZWxsYW5lb3VzIjp7IkFjY2VudENvbG9yIjoiI0E5OTNGRkZGIiwiQ2xhblRhZyI6dHJ1ZSwiQnV5Qm90Ijp7IkdyZW5hZGVzIjpbIkhFIEdyZW5hZGUiLCJNb2xvdG92IiwiU21va2UiLCJ+Il0sIlV0aWxpdGllcyI6WyJBcm1vciIsIkhlbG1ldCIsIlpldXMiLCJEZWZ1c2VyIiwifiJdLCJTZWNvbmRhcnkiOiJEZWFnbGVcL1Jldm9sdmVyIiwib24iOnRydWUsIlByaW1hcnkiOiJTY291dCJ9LCJBbnRpQmFja1N0YWIiOnsib24iOnRydWUsIkRpc3RhbmNlIjoxNjB9LCJGYXN0TGFkZGVyIjp0cnVlLCJMb2dzIjp7IkxvZ3NUeXBlIjpbIlNjcmVlbiIsIkNvbnNvbGUiLCJ+Il0sIm9uIjp0cnVlLCJMb2dzT3B0aW9uIjpbIkhpdCIsIk1pc3MiLCJDYXNpbm8iLCJDb25maWcgQ2hhbmdlcyAoU29vbikiLCJ+Il19fSwiSVNBRE1JTiI6dHJ1ZSwiQXV0aCI6eyJQYXNzV29yZCI6IioqKioqKioqKioqKioiLCJSZW1lbWJlck1lIjp0cnVlLCJVc2VyTmFtZSI6Ikluc3BleCJ9LCJSYWdlIjp7Ikp1bXBTY291dCI6dHJ1ZSwiUmVzb2x2ZXIiOnsiTW9kZSI6IlNvb24iLCJvbiI6dHJ1ZX0sIkJhY2tUcmFja0V4cGxvaXQiOnsib24iOnRydWUsIkJhY2tUcmFja1ZhbHVlIjo3fSwiSW1wcm92ZWRQcmVkaWN0aW9uIjp0cnVlfX0="
+    local DefaultConfig = 'eyJDYXNpbm8iOnsiQmV0QW1vdW50IjoiIiwiR2FtZSI6IkNvaW4gRmxpcCJ9LCJUYWJzIjoiSG9tZSIsIlZpc3VhbHMiOnsiQXNwZWN0UmF0aW8iOnsib24iOnRydWUsIlJhdGlvIjoxMzN9LCJCdWxsZXRUcmFjZXIiOnsiQ29sb3IiOiIjNzY3NkZGRkYiLCJvbiI6dHJ1ZX0sIldhdGVyTWFyayI6dHJ1ZX0sIkxPR0dFRElOIjp0cnVlLCJNaXNjZWxsYW5lb3VzIjp7IkFjY2VudENvbG9yIjoiI0E5OTNGRkZGIiwiQ2xhblRhZyI6dHJ1ZSwiQnV5Qm90Ijp7IkdyZW5hZGVzIjpbIkhFIEdyZW5hZGUiLCJNb2xvdG92IiwiU21va2UiLCJ+Il0sIlV0aWxpdGllcyI6WyJBcm1vciIsIkhlbG1ldCIsIlpldXMiLCJEZWZ1c2VyIiwifiJdLCJTZWNvbmRhcnkiOiJEZWFnbGVcL1Jldm9sdmVyIiwib24iOnRydWUsIlByaW1hcnkiOiJTY291dCJ9LCJBbnRpQmFja1N0YWIiOnsib24iOnRydWUsIkRpc3RhbmNlIjoxNjB9LCJGYXN0TGFkZGVyIjp0cnVlLCJMb2dzIjp7IkxvZ3NUeXBlIjpbIlNjcmVlbiIsIkNvbnNvbGUiLCJ+Il0sIm9uIjp0cnVlLCJMb2dzT3B0aW9uIjpbIkhpdCIsIk1pc3MiLCJDYXNpbm8iLCJDb25maWcgQ2hhbmdlcyAoU29vbikiLCJ+Il19fSwiSVNBRE1JTiI6dHJ1ZSwiQXV0aCI6eyJQYXNzV29yZCI6IioqKioqKioqKioqKioiLCJSZW1lbWJlck1lIjp0cnVlLCJVc2VyTmFtZSI6Ikluc3BleCJ9LCJSYWdlIjp7Ikp1bXBTY291dCI6dHJ1ZSwiUmVzb2x2ZXIiOnsiTW9kZSI6IlNvb24iLCJvbiI6dHJ1ZX0sIkJhY2tUcmFja0V4cGxvaXQiOnsib24iOnRydWUsIkJhY2tUcmFja1ZhbHVlIjo3fSwiSW1wcm92ZWRQcmVkaWN0aW9uIjp0cnVlfX0='
 
-    db.db.configs['Local'][1] = {"Default", DefaultConfig}
-    db.db.configs['Cloud'][2] = {"Default Cloud"}
-    db.configs = {"Default"}
+    db.db.configs['Local'][1] = {'Default', DefaultConfig}
+    db.db.configs['Cloud'][2] = {'Default Cloud'}
+    db.configs = {'Default'}
     db.configs.authors = {'qqwerty', 'debil', 'esoterik', 'dalbaeb'}
 end
 
-local condition_list do
-    math.randomseed(globals.framecount() + globals.tickcount() + globals.realtime())
-    pui.macros.r = '\aC8C8C8'
-    pui.macros.ez = '\aafafff'
-    condition_list = {"Default", "Standing", "Running", "Slowwalking", "Crouch", "Crouch Move", "Jumping", "Crouching Air", "Fake Lag", "Manual yaw", "Safe Head", "Dormant"}
+local ConditionList = {
+    'Standing',      -- State 1
+    'Running',       -- State 2  
+    'Slowwalking',   -- State 6
+    'Crouching',     -- State 4
+    'Crouch Moving', -- State 5
+    'Jumping',       -- State 3
+    'Air Crouching', -- State 7 (new)
+    'Fake Lagging',  -- State 9
+    'Manual Yaw',    -- State 10
+    'Safe Head',     -- State 11
+    'Dormant'        -- State 12
+}
+
+local AntiAimTypes = {
+    "Builder",
+    "Defensive"
+}
+
+local AA = {
+    States = {
+        [1] = {'stand', 'Standing', 'S'},
+        [2] = {'run', 'Running', 'R'},
+        [3] = {'air', 'In Air', 'A'},
+        [4] = {'crouch', 'Crouching', 'C'},
+        [5] = {'crouch_move', 'Crouch Moving', 'CM'},
+        [6] = {'walk', 'Slow Walking', 'SW'},
+        [7] = {'air_crouch', 'Air Crouching', 'AC'},  -- New
+        [9] = {'fakelag', 'Fake Lagging', 'FL'},
+        [10] = {'manual', 'Manual Yaw', 'M'},
+        [11] = {'safehead', 'Safe Head', 'SH'},
+        [12] = {'dormant', 'Dormant', 'D'}
+    },
+    ConditionSystem = {
+        Pitch = {
+            Standing = "Off", 
+            Running = "Off",
+            Slowwalking = "Off",
+            Crouching = "Off",
+            ["Crouch Moving"] = "Off",
+            Jumping = "Off", 
+            ["Air Crouching"] = "Off",
+            ["Fake Lagging"] = "Off",
+            ["Manual Yaw"] = "Off",
+            ["Safe Head"] = "Off",
+            Dormant = "Off"
+        },
+        Yaw = {
+            Standing = "180", 
+            Running = "180",
+            Slowwalking = "180",
+            Crouching = "180",
+            ["Crouch Moving"] = "180",
+            Jumping = "180", 
+            ["Air Crouching"] = "180",
+            ["Fake Lagging"] = "180",
+            ["Manual Yaw"] = "180",
+            ["Safe Head"] = "180",
+            Dormant = "180"
+        },
+        YawOffset = {
+            Standing = 0, 
+            Running = 0,
+            Slowwalking = 0,
+            Crouching = 0,
+            ["Crouch Moving"] = 0,
+            Jumping = 0, 
+            ["Air Crouching"] = 0,
+            ["Fake Lagging"] = 0,
+            ["Manual Yaw"] = 0,
+            ["Safe Head"] = 0,
+            Dormant = 0
+        },
+        YawJitter = {
+            Standing = "Off", 
+            Running = "Off",
+            Slowwalking = "Off",
+            Crouching = "Off",
+            ["Crouch Moving"] = "Off",
+            Jumping = "Off", 
+            ["Air Crouching"] = "Off",
+            ["Fake Lagging"] = "Off",
+            ["Manual Yaw"] = "Off",
+            ["Safe Head"] = "Off",
+            Dormant = "Off"
+        },
+        YawJitterOffset = {
+            Standing = 0, 
+            Running = 0,
+            Slowwalking = 0,
+            Crouching = 0,
+            ["Crouch Moving"] = 0,
+            Jumping = 0, 
+            ["Air Crouching"] = 0,
+            ["Fake Lagging"] = 0,
+            ["Manual Yaw"] = 0,
+            ["Safe Head"] = 0,
+            Dormant = 0
+        },
+        BodyYawMode = {
+            Standing = "Off", 
+            Running = "Off",
+            Slowwalking = "Off",
+            Crouching = "Off",
+            ["Crouch Moving"] = "Off",
+            Jumping = "Off", 
+            ["Air Crouching"] = "Off",
+            ["Fake Lagging"] = "Off",
+            ["Manual Yaw"] = "Off",
+            ["Safe Head"] = "Off",
+            Dormant = "Off"
+        },
+        BodyYawOffset = {
+            Standing = 0, 
+            Running = 0,
+            Slowwalking = 0,
+            Crouching = 0,
+            ["Crouch Moving"] = 0,
+            Jumping = 0, 
+            ["Air Crouching"] = 0,
+            ["Fake Lagging"] = 0,
+            ["Manual Yaw"] = 0,
+            ["Safe Head"] = 0,
+            Dormant = 0
+        },
+        FreestandingBodyYaw = {
+            Standing = false, 
+            Running = false,
+            Slowwalking = false,
+            Crouching = false,
+            ["Crouch Moving"] = false,
+            Jumping = false, 
+            ["Air Crouching"] = false,
+            ["Fake Lagging"] = false,
+            ["Manual Yaw"] = false,
+            ["Safe Head"] = false,
+            Dormant = false
+        },
+        EdgeYaw = {
+            Standing = false, 
+            Running = false,
+            Slowwalking = false,
+            Crouching = false,
+            ["Crouch Moving"] = false,
+            Jumping = false, 
+            ["Air Crouching"] = false,
+            ["Fake Lagging"] = false,
+            ["Manual Yaw"] = false,
+            ["Safe Head"] = false,
+            Dormant = false
+        },
+        Freestanding = {
+            Standing = false, 
+            Running = false,
+            Slowwalking = false,
+            Crouching = false,
+            ["Crouch Moving"] = false,
+            Jumping = false, 
+            ["Air Crouching"] = false,
+            ["Fake Lagging"] = false,
+            ["Manual Yaw"] = false,
+            ["Safe Head"] = false,
+            Dormant = false
+        },
+        Roll = {
+            Standing = 0, 
+            Running = 0,
+            Slowwalking = 0,
+            Crouching = 0,
+            ["Crouch Moving"] = 0,
+            Jumping = 0, 
+            ["Air Crouching"] = 0,
+            ["Fake Lagging"] = 0,
+            ["Manual Yaw"] = 0,
+            ["Safe Head"] = 0,
+            Dormant = 0
+        },
+        Defensive = {
+            Enabled = false,
+            Force = false,
+            Duration = 13,
+            Disablers = {"Body Yaw", "Yaw Jitter"},
+            Pitch = "None",
+            PitchValue = 0,
+            Yaw = "None",
+            YawValue = 0,
+            RemainingTicks = 0,
+            MaxTicks = 13
+        },
+    },
+    Presets = {
+        Custom = {
+            [1] = {},
+        },
+    },
+    
+    -- Enhanced conditions system
+    Conditions = {
+        -- Toggle conditions on/off
+        Dormant = false,
+        SafeHead = false,
+        
+        -- Safe Head weapon filters
+        SafeHeadWeapons = {
+            Knife = false,
+            Zeus = false, 
+            HeightAdvantage = false
+        },
+        
+        -- Manual AA states
+        ManualAA = {
+            Active = false,
+            Direction = nil, -- 'forward', 'left', 'right'
+            LastDirection = nil
+        },
+        
+        -- Exploit states
+        Exploit = {
+            DoubleTap = false,
+            HideShots = false,
+            FakeDuck = false
+        },
+        
+        -- Defensive AA
+        Defensive = {
+            Enabled = false,
+            Force = false,
+            Flicking = false,
+            RemainingTicks = 0,
+            MaxTicks = 13
+        }
+    },
+    
+    -- Helper functions for condition detection
+    Functions = {
+        HeightAdvantage = function(localPlayer)
+            if not localPlayer then return false end
+            local origin = vector(entity.get_origin(localPlayer))
+            local threat = client.current_threat()
+            if not threat then return false end
+            local threat_origin = vector(entity.get_origin(threat))
+            local height_to_threat = origin.z - threat_origin.z
+            return height_to_threat > 50
+        end,
+        
+        IsFakeLagging = function()
+            return References.AntiAim.FakeLag.Enable:get() and 
+                   not (References.Rage.Aimbot.DoubleTap[1]:get() and References.Rage.Aimbot.DoubleTap[2]:get())
+        end,
+        
+        GetWeaponType = function(weapon)
+            if not weapon then return nil end
+            local csgoweapon = csgo_weapons(weapon)
+            if not csgoweapon then return nil end
+            
+            if csgoweapon.is_knife then return 'knife' end
+            if csgoweapon.is_taser then return 'zeus' end
+            return 'other'
+        end,
+        
+        ShouldUseSafeHead = function(weapon)
+            local weaponType = AA.Functions.GetWeaponType(weapon)
+            if weaponType == 'knife' and AA.Conditions.SafeHeadWeapons.Knife then
+                return true
+            elseif weaponType == 'zeus' and AA.Conditions.SafeHeadWeapons.Zeus then
+                return true
+            end
+            return false
+        end
+    }
+}
+
+local gap,length = {},{}
+do
+    for i=0, 100 do
+        gap[i] = 'Gap: '..i..'px'
+    end
+    for i=0, 200 do
+        length[i] = 'length: '..i..'px'
+    end
 end
 
 local Menu = {
-    MainHeader = GUI.Header("Orion Solutions", Groups.FakeLag),
+    MainHeader = GUI.Header('Orion Solutions', Groups.FakeLag),
 
-    Tabs = Groups.FakeLag:combobox("\n", TabNames),
+    Tabs = Groups.FakeLag:combobox('\n', TabNames),
 
     Home = {
         Statistics = {
-            GUI.Header("Statistics", Groups.Other),
-            TimesLoadedCounter = Groups.Other:label("\f<silent>Times Loaded: \v0"),
-            KillCounter = Groups.Other:label("\f<silent>Kills: \v0"),
-            CoinCounter = Groups.Other:label("\f<silent>Coins: \v0"),
+            GUI.Header('Statistics', Groups.Other),
+            TimesLoadedCounter = Groups.Other:label('\f<silent>Times Loaded: \v0'),
+            KillCounter = Groups.Other:label('\f<silent>Kills: \v0'),
+            CoinCounter = Groups.Other:label('\f<silent>Coins: \v0'),
             GUI.Space(Groups.Other),
-            GUI.Header("Users", Groups.Other),
-            OnlineUsers = Groups.Other:label("\f<silent>Online: \v0"),
+            GUI.Header('Users', Groups.Other),
+            OnlineUsers = Groups.Other:label('\f<silent>Online: \v0'),
         },
 
         ConfigSystem = {
-            NewConfigHeader = GUI.Header("New Config", Groups.FakeLag),
-            Name = Groups.FakeLag:textbox("Name", nil, false),
-            Create = Groups.FakeLag:button("Create & Save"),
-            Import = Groups.FakeLag:button("Import & Load"),
+            NewConfigHeader = GUI.Header('New Config', Groups.FakeLag),
+            Name = Groups.FakeLag:textbox('Name', nil, false),
+            Create = Groups.FakeLag:button('Create & Save'),
+            Import = Groups.FakeLag:button('Import & Load'),
 
-            GUI.Space(Groups.FakeLag),
-            GUI.Header("Config Type", Groups.FakeLag),
-            Type = Groups.FakeLag:combobox("\n", ConfigType, nil, false),
+            GUI.Space(Groups.Other),
+            GUI.Header('Config Type', Groups.Other),
+            Type = Groups.Other:combobox('\n', ConfigType, nil, false),
 
-            GUI.Header("Your Configs", Groups.Angles),
-		    List = Groups.Angles:listbox("Configs", db.configs, nil, false),
-		    Selected = Groups.Angles:label("Selected: \vDefault"),
-		    Load = Groups.Angles:button("Load"),
-		    LoadAA = Groups.Angles:button("Load AA"),
-		    Save = Groups.Angles:button("Save"),
-		    Export = Groups.Angles:button("Export"),
-		    Delete = Groups.Angles:button("\aFF0000FFDelete"),
+            GUI.Header('Your Configs', Groups.Angles),
+		    List = Groups.Angles:listbox('Configs', db.configs, nil, false),
+		    Selected = Groups.Angles:label('Selected: \vDefault'),
+		    Load = Groups.Angles:button('Load'),
+		    Save = Groups.Angles:button('Save'),
+		    Export = Groups.Angles:button('Export'),
+		    Delete = Groups.Angles:button('\aFF0000FFDelete'),
 
-            Upload = Groups.Other:button("\v Upload To Cloud")
+            Upload = Groups.FakeLag:button('\v Upload To Cloud')
         },
     },
 
     Rage = {
-        GUI.Header("Rage", Groups.Angles),
+        GUI.Header('Rage', Groups.Angles),
 
-        Resolver = GUI.Feature({Groups.Angles:checkbox("Resolver")}, function (Parent)
+        Resolver = GUI.Feature({Groups.Angles:checkbox('Resolver')}, function (Parent)
 		    return {
-                Mode = Groups.Angles:combobox("Resolver Mode", ResolverModes),
+                Mode = Groups.Angles:combobox('Resolver Mode', ResolverModes),
 		    }, true
 	    end),
 
-        BackTrackExploit = GUI.Feature({Groups.Angles:checkbox("Enhance Backtrack")}, function (Parent)
+        BackTrackExploit = GUI.Feature({Groups.Angles:checkbox('Enhance Backtrack')}, function (Parent)
 		    return {
-			    BackTrackValue = Groups.Angles:slider("Value ", 2, 7, 1, true, nil, 0.1, ToolTips.BackTrack),
+			    BackTrackValue = Groups.Angles:slider('Value ', 2, 7, 1, true, nil, 0.1, ToolTips.BackTrack),
 		    }, true
 	    end),
 
-        ImprovedPrediction = Groups.Angles:checkbox("Improved Prediction"),
-		JumpScout = Groups.Angles:checkbox("Jump Scout"),
+        ImprovedPrediction = Groups.Angles:checkbox('Improved Prediction'),
+		JumpScout = Groups.Angles:checkbox('Jump Scout'),
     },
     
     AntiAim = {
-        Conditon = Groups.Angles:combobox("\vCondition", condition_list, nil, false)
+        FakeLag = {
+            EnableFakeLag = GUI.Feature({Groups.FakeLag:checkbox('Enable FakeLag')}, function (Parent)
+		        return {
+                    Amount = Groups.FakeLag:combobox('Amount', FakeLagAmount),
+                    Variance = Groups.FakeLag:slider('Variance ', 0, 100, 0, true, '%', 1),
+			        Limit = Groups.FakeLag:slider('Limit ', 1, 15, 1),
+		        }, true
+	        end),
+        },
+
+        --ActiveConditions = Groups.FakeLag:multiselect('Active Conditions', ConditionList),
+        AntiAimType = Groups.FakeLag:combobox('Types', AntiAimTypes),
+
+        ConditionSettings = {
+            Builder = {
+                GUI.Header('Condition Settings', Groups.Angles),
+
+                SelectedCondition = Groups.Angles:combobox('Configure Condition', ConditionList),
+    
+                Pitch = Groups.Angles:combobox('Pitch', {'Off', 'Default', 'Up', 'Down', 'Zero', 'Custom'}),
+                YawBase = Groups.Angles:combobox('Yaw Base', {'Local View', 'At Targets'}),
+                Yaw = Groups.Angles:combobox('Yaw', {'Off', '180', 'Spin', 'Static', '180 Z', 'Crosshair'}),
+                YawOffset = Groups.Angles:slider('Yaw Offset', -180, 180, 0),
+                YawJitter = Groups.Angles:combobox('Yaw Jitter', {'Off', 'Offset', 'Center', 'Random', 'Skitter'}),
+                YawJitterOffset = Groups.Angles:slider('Yaw Jitter Offset', -180, 180, 0),
+                BodyYaw = Groups.Angles:combobox('Body Yaw', {"Off", 'Opposite', 'Jitter', 'Static'}),
+                BodyYawOffset = Groups.Angles:slider("Body Yaw Offset", -180, 180, 0),
+                FreestandingBodyYaw = Groups.Angles:checkbox('Freestanding Body Yaw'),
+                EdgeYaw = Groups.Angles:checkbox('Edge Yaw'),
+                Freestanding = Groups.Angles:checkbox('Freestanding'),
+                Roll = Groups.Angles:slider("Roll", -45, 45, 0),
+            },
+
+            Defensive = {
+                -- Defensive AA Settings
+                GUI.Header('Defensive AA', Groups.Angles),
+                DefensiveEnabled = Groups.Angles:checkbox('Defensive AA'),
+                DefensiveForce = Groups.Angles:checkbox('Force Defensive'),
+                DefensiveDuration = Groups.Angles:slider('Defensive Duration', 1, 13, 13, true, 'ticks'),
+			    DefensiveDisablers = Groups.Angles:multiselect('Defensive Disablers', {"Body Yaw", "Yaw Jitter"}),
+                DefensivePitch = Groups.Angles:combobox('Defensive Pitch', {'None', 'Random', 'Up', 'Down', 'Custom'}),
+                DefensivePitchValue = Groups.Angles:slider('Defensive Pitch Value', -89, 89, 0, true, '°'),
+                DefensiveYaw = Groups.Angles:combobox('Defensive Yaw', {'None', 'Sideways', 'Random', 'Opposite', 'Custom'}),
+                DefensiveYawValue = Groups.Angles:slider('Defensive Yaw Value', -180, 180, 0, true, '°'),
+
+            },
+        }
     },
 
     Visuals = {
-        GUI.Header("Visuals", Groups.Angles),
+        GUI.Header('Visuals', Groups.Angles),
 
-        WaterMark = Groups.Angles:checkbox("WaterMark", true, true),
-        AspectRatio = GUI.Feature({Groups.Angles:checkbox("Aspect Ratio")}, function(Parent)
+        WaterMark = Groups.Angles:checkbox('WaterMark', true, true),
+        AspectRatio = GUI.Feature({Groups.Angles:checkbox('Aspect Ratio')}, function(Parent)
             return {
-                Ratio = Groups.Angles:slider("\nRatio", 80, 200, 133, true, nil, 0.01, table.distribute(ToolTips.AspectRatios, 2, 1))
+                Ratio = Groups.Angles:slider('\nRatio', 80, 200, 133, true, nil, 0.01, table.distribute(ToolTips.AspectRatios, 2, 1))
             }, true
         end),
         
         GUI.Space(Groups.Angles),
-        GUI.Header("Effects", Groups.Angles),
+        GUI.Header('Effects', Groups.Angles),
 
-        BulletTracer = GUI.Feature({Groups.Angles:checkbox("BulletTracer")}, function(Parent)
+        BulletTracer = GUI.Feature({Groups.Angles:checkbox('BulletTracer')}, function(Parent)
             return {
-                Color = Groups.Angles:color_picker("Color", colors.accent.r, colors.accent.g, colors.accent.b, 255),
+                Color = Groups.Angles:color_picker('Color', colors.accent.r, colors.accent.g, colors.accent.b, 255),
             }, true
         end),
     },
 
     Miscellaneous = {
-        GUI.Header("Miscellaneous", Groups.Angles),
-		Groups.Angles:label("Accent color"),
-	    AccentColor = Groups.Angles:color_picker("Accent color", colors.accent.r, colors.accent.g, colors.accent.b, 255),
-        AntiBackStab = GUI.Feature({Groups.Angles:checkbox("Anti BackStab")}, function (Parent)
+        GUI.Header('Miscellaneous', Groups.Angles),
+		Groups.Angles:label('Accent color'),
+	    AccentColor = Groups.Angles:color_picker('Accent color', colors.accent.r, colors.accent.g, colors.accent.b, 255),
+        AntiBackStab = GUI.Feature({Groups.Angles:checkbox('Anti BackStab')}, function (Parent)
 		    return {
-			    Distance = Groups.Angles:slider("Distance ", 0, 500, 160),
+			    Distance = Groups.Angles:slider('Distance ', 0, 500, 160),
 		    }, true
 	    end),
-		BuyBot = GUI.Feature({Groups.Angles:checkbox("Buy Bot")}, function(Parent)
+		BuyBot = GUI.Feature({Groups.Angles:checkbox('Buy Bot')}, function(Parent)
 			return {
-			    Primary = Groups.Angles:combobox("Primary Weapon", PrimaryWeapons),
-			    Secondary = Groups.Angles:combobox("Secondary Weapon", SecondaryWeapons),
-			    Grenades = Groups.Angles:multiselect("Grenades", Grenades),
-			    Utilities = Groups.Angles:multiselect("Utilities", Utilities),
+			    Primary = Groups.Angles:combobox('Primary Weapon', PrimaryWeapons),
+			    Secondary = Groups.Angles:combobox('Secondary Weapon', SecondaryWeapons),
+			    Grenades = Groups.Angles:multiselect('Grenades', Grenades),
+			    Utilities = Groups.Angles:multiselect('Utilities', Utilities),
 			}, true
 		end),
-        Logs = GUI.Feature({Groups.Angles:checkbox("Logs")}, function (Parent)
+        Logs = GUI.Feature({Groups.Angles:checkbox('Logs')}, function (Parent)
 		    return {
-			    LogsType = Groups.Angles:multiselect("Logs Type", LogsType),
-                LogsOption = Groups.Angles:multiselect("Logs Option", LogsOption),
+			    LogsType = Groups.Angles:multiselect('Logs Type', LogsType),
+                LogsOption = Groups.Angles:multiselect('Logs Option', LogsOption),
 		    }, true
 	    end),
-        DebugPanel = Groups.Angles:checkbox("Debug Panel"),
-        ClanTag = Groups.Angles:checkbox("Orion-Tag"),
-        FastLadder = Groups.Angles:checkbox("Fast Ladder"),
-
+        ClanTag = Groups.Angles:checkbox('Orion-Tag'),
+        FastLadder = Groups.Angles:checkbox('Fast Ladder'),
 	},
 
     Casino = {
-        GUI.Header("Games", Groups.Other),
-        Game = Groups.Other:combobox("Games", "Coin Flip", "Coming Soon..."),
+        GUI.Header('Games', Groups.Other),
+        Game = Groups.Other:combobox('Games', 'Coin Flip', 'Coming Soon...'),
 
-        GUI.Header("Casino", Groups.Angles),
-        BetAmountLabel = Groups.Angles:label("Bet Amount: "),
-        BetAmount = Groups.Angles:textbox("Bet Amount"),
-        Flip = Groups.Angles:button("Flip Coin"),
+        GUI.Header('Casino', Groups.Angles),
+        BetAmountLabel = Groups.Angles:label('Bet Amount: '),
+        BetAmount = Groups.Angles:textbox('Bet Amount'),
+        Flip = Groups.Angles:button('Flip Coin'),
         
         GUI.Space(Groups.FakeLag),
-        Balance = Groups.FakeLag:label("\f<silent> Balance: \v0"),
+        Balance = Groups.FakeLag:label('\f<silent> Balance: \v0'),
         
 
 
     },
 
     Auth = {
-        UserNameLabel = Groups.Angles:label("UserName"),
-        UserName = Groups.Angles:textbox("UserName"),
-        PassWordLabel = Groups.Angles:label("PassWord"),
-        PassWord = Groups.Angles:textbox("PassWord"),
-        Login = Groups.Angles:button("Login"),
-        RememberMe = Groups.Angles:checkbox("Remember Me"),
+        UserNameLabel = Groups.Angles:label('UserName'),
+        UserName = Groups.Angles:textbox('UserName'),
+        PassWordLabel = Groups.Angles:label('PassWord'),
+        PassWord = Groups.Angles:textbox('PassWord'),
+        Login = Groups.Angles:button('Login'),
+        RememberMe = Groups.Angles:checkbox('Remember Me'),
 
-        StatusLabel = Groups.Angles:label(" "),
+        StatusLabel = Groups.Angles:label(' '),
     },
 
-    LOGGEDIN = Groups.Angles:checkbox("LOGGED IN"),
-    ISADMIN = Groups.Angles:checkbox("IS ADMIN"),
+    LOGGEDIN = Groups.Angles:checkbox('LOGGED IN'),
+    ISADMIN = Groups.Angles:checkbox('IS ADMIN'),
 }
 
-client.exec("Clear")
-client.exec("con_filter_enable 0")
+client.exec('Clear')
+client.exec('con_filter_enable 0')
+client.exec('con_filter_text \'[gamesense] / [Orion Solutions]\'')
 
 MathUtil = {
     clamp = function(value, min_val, max_val)
@@ -839,16 +1048,16 @@ VectorUtil = {
     end,
     
     get_velocity = function(Player)
-        local vx = entity.get_prop(Player, "m_vecVelocity[0]") or 0
-        local vy = entity.get_prop(Player, "m_vecVelocity[1]") or 0
-        local vz = entity.get_prop(Player, "m_vecVelocity[2]") or 0
+        local vx = entity.get_prop(Player, 'm_vecVelocity[0]') or 0
+        local vy = entity.get_prop(Player, 'm_vecVelocity[1]') or 0
+        local vz = entity.get_prop(Player, 'm_vecVelocity[2]') or 0
         return {x = vx, y = vy, z = vz}
     end,
     
     get_origin = function(Player)
-        local x = entity.get_prop(Player, "m_vecOrigin[0]") or 0
-        local y = entity.get_prop(Player, "m_vecOrigin[1]") or 0
-        local z = entity.get_prop(Player, "m_vecOrigin[2]") or 0
+        local x = entity.get_prop(Player, 'm_vecOrigin[0]') or 0
+        local y = entity.get_prop(Player, 'm_vecOrigin[1]') or 0
+        local z = entity.get_prop(Player, 'm_vecOrigin[2]') or 0
         return {x = x, y = y, z = z}
     end,
     
@@ -908,14 +1117,14 @@ local function update_aspect_ratio()
         local target = Menu.Visuals.AspectRatio.Ratio.value * 0.01
         aspect_ratio_value = MathUtil.lerp(aspect_ratio_value, target, globals.frametime() * 8)
         aspect_ratio_active = math.abs(target - aspect_ratio_value) > 0.001
-        client.set_cvar("r_aspectratio", aspect_ratio_value)
+        client.set_cvar('r_aspectratio', aspect_ratio_value)
     else
         aspect_ratio_value = MathUtil.lerp(aspect_ratio_value, aspect_ratio_default, globals.frametime() * 8)
-        client.set_cvar("r_aspectratio", aspect_ratio_value)
+        client.set_cvar('r_aspectratio', aspect_ratio_value)
         
         if math.abs(aspect_ratio_value - aspect_ratio_default) < 0.001 then
-            client.unset_event_callback("paint", update_aspect_ratio)
-            client.set_cvar("r_aspectratio", 0)
+            client.unset_event_callback('paint', update_aspect_ratio)
+            client.set_cvar('r_aspectratio', 0)
             aspect_ratio_active = false
         end
     end
@@ -933,7 +1142,7 @@ local function setup_aspect_ratio()
     Menu.Visuals.AspectRatio.on:set_callback(function(this)
         aspect_ratio_active = true
         if this:get() then
-            client.set_event_callback("paint", update_aspect_ratio)
+            client.set_event_callback('paint', update_aspect_ratio)
         end
     end, true)
     
@@ -941,7 +1150,7 @@ local function setup_aspect_ratio()
     
     -- Reset on startup
     client.delay_call(0, function()
-        client.set_cvar("r_aspectratio", 0)
+        client.set_cvar('r_aspectratio', 0)
     end)
 end
 
@@ -998,7 +1207,7 @@ Glow = function(x, y, w, h, glow_intensity, bg_r, bg_g, bg_b, bg_a, glow_r, glow
 end
 
 -- Firebase Storage Configuration
-local FIREBASE_LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/logo.png?alt=media&token=67b51834-a77d-423c-8502-bea77a714cec"
+local FIREBASE_LOGO_URL = 'https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/logo.png?alt=media&token=67b51834-a77d-423c-8502-bea77a714cec'
 
 -- Global logo variables
 local logo = nil
@@ -1009,13 +1218,13 @@ local UserPfpCache = {}
 
 local function downloadFirebaseStorageFile(storagePathOrUrl, callback)
     local url
-    if storagePathOrUrl:find("^https://") then
+    if storagePathOrUrl:find('^https://') then
         -- full URL (logo, special cases)
         url = storagePathOrUrl
     else
         -- Firebase Storage path (pfps, etc.)
-        url = "https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/"
-            .. storagePathOrUrl .. "?alt=media"
+        url = 'https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/'
+            .. storagePathOrUrl .. '?alt=media'
     end
 
     http.get(url, {}, function(success, response)
@@ -1031,7 +1240,7 @@ end
 local function loadLogo()
     -- 1. Try local cache first
     pcall(function()
-        logo = readfile("orion_logo.png")
+        logo = readfile('orion_logo.png')
         if logo then
             logo_loaded = true
             return
@@ -1047,7 +1256,7 @@ local function loadLogo()
 
                 -- save to cache
                 pcall(function()
-                    writefile("orion_logo.png", data)
+                    writefile('orion_logo.png', data)
                 end)
             else
                 logo_loaded = false
@@ -1059,72 +1268,207 @@ end
 loadLogo()
 
 local function loadUserPfp(username, steamid, pathOrUrl, callback)
-    -- already cached?
     if UserPfpCache[username] then
         callback(UserPfpCache[username])
         return
     end
 
-    if not pathOrUrl or pathOrUrl == "" then
-        callback(nil) -- no custom PFP, let caller fallback to steam avatar
+    if not pathOrUrl or pathOrUrl == '' then
+        callback(nil)
         return
     end
 
     downloadFirebaseStorageFile(pathOrUrl, function(success, data)
         if success then
-            -- directly load into a texture (no disk writes required)
-            local tex = renderer.load_png(data, 64, 64) -- preload at decent size
+            local tex = renderer.load_png(data, 64, 64) 
             if tex then
                 UserPfpCache[username] = tex
                 callback(tex)
                 return
             end
         end
-        callback(nil) -- failed, caller decides fallback
+        callback(nil)
     end)
 end
 
 local function getUserProfileImage(username, steamid, callback)
-    -- check cache first
     if UserPfpCache[username] then
         callback(UserPfpCache[username])
         return
     end
 
-    -- fetch Firebase record
-    FireBase.read(PATHS.Users .. "/" .. username, function(success, userData)
+    FireBase.read(PATHS.Users .. '/' .. username, function(success, userData)
         if success and userData then
             local imgUrl = userData.profileImageStatic or userData.profileImage
-            if imgUrl and imgUrl ~= "" then
+            if imgUrl and imgUrl ~= '' then
                 loadUserPfp(username, steamid, imgUrl, callback)
                 return
             end
         end
-        callback(nil) -- let caller handle Steam avatar fallback
+        callback(nil) 
     end)
 end
 
 local LocalPlayer = {
     Entity = entity.get_local_player(),
     Valid = false,
-
     Threat = client.current_threat(),
-
     Scoped = false,
     Weapon = nil,
-
     Side = 0,
     Origin = vector(),
     Velocity = -1,
     MoveType = -1,
     Jumping = false,
-
     InScore = false,
     CommandNumber = 0,
-
-    State = "Standing"
-
+    State = 0,
+    LastState = 0,
+    ManualYaw = nil, 
+    Flicking = false, -- For defensive flick
+    Exploit = '', -- Current exploit state
+    OnGround = false,
+    Moving = false,
+    Crouching = false
 }
+
+LocalPlayerState = function(cmd)
+    LocalPlayer.Entity = entity.get_local_player()
+    LocalPlayer.Valid = (LocalPlayer.Entity ~= nil) and entity.is_alive(LocalPlayer.Entity)
+    
+    if LocalPlayer.Valid then
+        local velocity = vector(entity.get_prop(LocalPlayer.Entity, 'm_vecVelocity'))
+        LocalPlayer.Velocity = velocity:length2d()
+        
+        local flags = entity.get_prop(LocalPlayer.Entity, 'm_fFlags')
+        LocalPlayer.OnGround = bit.band(flags, 1) ~= 0
+        LocalPlayer.Crouching = entity.get_prop(LocalPlayer.Entity, "m_flDuckAmount") > 0.9
+        LocalPlayer.Moving = LocalPlayer.Velocity > 5
+        
+        LocalPlayer.InScore = cmd.in_score == 1
+        LocalPlayer.Scoped = entity.get_prop(LocalPlayer.Entity, 'm_bIsScoped') == 1
+        LocalPlayer.Weapon = entity.get_player_weapon(LocalPlayer.Entity)
+        
+        LocalPlayer.State = 1 -- Default to Standing
+
+        if LocalPlayer.OnGround then
+            if LocalPlayer.Crouching then
+                if LocalPlayer.Moving then
+                    LocalPlayer.State = 5 -- Crouch Moving
+                else
+                    LocalPlayer.State = 4 -- Crouching
+                end
+            else
+                if LocalPlayer.Moving then
+                    if References.AntiAim.Other.SlowWalk:get() and References.AntiAim.Other.SlowWalk.hotkey:get() then
+                        LocalPlayer.State = 6 -- Slow Walking
+                    else
+                        LocalPlayer.State = 2 -- Running
+                    end
+                else
+                    LocalPlayer.State = 1 -- Standing
+                end
+            end
+        else
+            if LocalPlayer.Crouching then
+                LocalPlayer.State = 5 -- Air Crouching
+            else
+                LocalPlayer.State = 3 -- In Air / Jumping
+            end
+        end
+
+        local baseState = LocalPlayer.State
+
+        if LocalPlayer.ManualYaw then 
+            LocalPlayer.State = 10 
+        elseif AA.Conditions.Dormant and #entity.get_players(true) == 0 then
+            LocalPlayer.State = 12 
+        elseif References.AntiAim.FakeLag.Enable:get() and not (References.Rage.Aimbot.DoubleTap[1]:get() and References.Rage.Aimbot.DoubleTap[2]:get()) then
+            LocalPlayer.State = 9
+        end
+
+        if AA.Conditions.SafeHead then
+            local csgoweapon = csgo_weapons(LocalPlayer.Weapon)
+            if csgoweapon then
+                local height_advantage = AA.Functions.HeightAdvantage(LocalPlayer.Entity)
+                if (csgoweapon.is_knife and AA.Conditions.SafeHeadWeapons.Knife) or
+                   (csgoweapon.is_taser and AA.Conditions.SafeHeadWeapons.Zeus) or
+                   (AA.Conditions.SafeHeadWeapons.HeightAdvantage and height_advantage) then
+                    LocalPlayer.State = 11
+                end
+            end
+        end
+    end
+end
+
+AntiAim = function(cmd)
+    if not LocalPlayer.Valid then return end
+
+    References.AntiAim.Angles.Yaw[2]:set_visible(false)
+    References.AntiAim.Angles.Yaw[2]:set_enabled(false)
+    
+    local stateData = AA.States[LocalPlayer.State]
+    if stateData and LocalPlayer.State ~= LocalPlayer.LastState then
+        print("AA State: " .. stateData[2])
+        LocalPlayer.LastState = LocalPlayer.State
+    end
+
+    local stateToConditionMap = {
+        [1] = "Standing",
+        [2] = "Running", 
+        [3] = "Jumping",
+        [4] = "Crouching", 
+        [5] = "Crouch Moving", 
+        [6] = "Slowwalking",   
+        [7] = "Air Crouching", 
+        [9] = "Fake Lagging", 
+        [10] = "Manual Yaw", 
+        [11] = "Safe Head",
+        [12] = "Dormant" 
+    }
+
+    local currentCondition = stateToConditionMap[LocalPlayer.State] or "Standing"
+    local pitchSetting = AA.ConditionSystem.Pitch[currentCondition] or "Off"
+    local yawOffset = AA.ConditionSystem.YawOffset[currentCondition] or 0
+    local yawSetting = AA.ConditionSystem.Yaw[currentCondition] or "180"
+    local yawJitterSetting = AA.ConditionSystem.YawJitter[currentCondition] or "Off"
+    local bodyYawMode = AA.ConditionSystem.BodyYawMode[currentCondition] or "Off"
+    local bodyYawOffset = AA.ConditionSystem.BodyYawOffset[currentCondition] or 0
+    local freestandingBodyYaw = AA.ConditionSystem.FreestandingBodyYaw[currentCondition] or false
+    local edgeYaw = AA.ConditionSystem.EdgeYaw[currentCondition] or false
+    local freestanding = AA.ConditionSystem.Freestanding[currentCondition] or false
+    local rollValue = AA.ConditionSystem.Roll[currentCondition] or 0
+
+    References.AntiAim.Angles.Pitch[1]:set(pitchSetting)
+
+    References.AntiAim.Angles.Yaw[1]:set(yawSetting)
+
+    References.AntiAim.Angles.YawJitter[1]:set(yawJitterSetting)
+
+    References.AntiAim.Angles.BodyYaw[1]:set(bodyYawMode)
+
+    References.AntiAim.Angles.BodyYaw[2]:set(bodyYawOffset)
+
+    References.AntiAim.Angles.FreestandingBodyYaw:set(freestandingBodyYaw)
+
+    References.AntiAim.Angles.EdgeYaw:set(edgeYaw)
+
+    References.AntiAim.Angles.Freestanding:set(freestanding)
+
+    References.AntiAim.Angles.Roll:set(rollValue)
+
+    References.AntiAim.Angles.Yaw[2]:override(yawOffset)
+
+    local yawBaseSetting = Menu.AntiAim.ConditionSettings.Builder.YawBase:get()
+    References.AntiAim.Angles.YawBase:set(yawBaseSetting)
+
+    if globals.tickcount() % 64 == 0 then
+        print(string.format("State: %d | Condition: %s | Pitch: %s | Yaw: %s | Yaw Jitter: %s | Body Yaw: %s | Body Yaw Offset: %d | FS Body Yaw: %s | Edge Yaw: %s | Freestanding: %s | Roll: %d | Yaw Offset: %d | Yaw Base: %s", 
+            LocalPlayer.State, currentCondition, pitchSetting, yawSetting, yawJitterSetting, bodyYawMode, bodyYawOffset, 
+            freestandingBodyYaw and "ON" or "OFF", edgeYaw and "ON" or "OFF", freestanding and "ON" or "OFF", 
+            rollValue, yawOffset, yawBaseSetting))
+    end
+end
 
 local notification = {
     start_time = 0,       
@@ -1158,7 +1502,7 @@ notification.OnLoad = function()
 
     
         local icon_texture = renderer.load_png(logo, 23,23)
-        renderer.texture(icon_texture, x + 4, y - 1, 23, 23, 255, 255, 255, a, "f")
+        renderer.texture(icon_texture, x + 4, y - 1, 23, 23, 255, 255, 255, a, 'f')
     end
 
     local menu_x, menu_y = ui.menu_position()
@@ -1167,14 +1511,14 @@ notification.OnLoad = function()
 
     draw_notification_bar(menu_x + 12, menu_y - 25, 250 * self.menu_alpha, 20, accent_r, accent_g, accent_b, 255 * self.menu_alpha)
 
-    local gradient_text = "O R I O N  S O L U T I O N S" 
+    local gradient_text = 'O R I O N  S O L U T I O N S' 
 
-    renderer.text(menu_x + 12 + 40 + 1, menu_y - 22 - 1, 0, 0, 0, 255 * self.menu_alpha, nil, nil, "O R I O N  S O L U T I O N S")
-    renderer.text(menu_x + 12 + 40 - 1, menu_y - 22 + 1, 0, 0, 0, 255 * self.menu_alpha, nil, nil, "O R I O N  S O L U T I O N S")
-    renderer.text(menu_x + 12 + 40 - 1, menu_y - 22 - 1, 0, 0, 0, 255 * self.menu_alpha, nil, nil, "O R I O N  S O L U T I O N S")
-    renderer.text(menu_x + 12 + 40 + 2, menu_y - 22 + 2, 0, 0, 0, 255 * self.menu_alpha, nil, nil, "O R I O N  S O L U T I O N S")
+    renderer.text(menu_x + 12 + 40 + 1, menu_y - 22 - 1, 0, 0, 0, 255 * self.menu_alpha, nil, nil, 'O R I O N  S O L U T I O N S')
+    renderer.text(menu_x + 12 + 40 - 1, menu_y - 22 + 1, 0, 0, 0, 255 * self.menu_alpha, nil, nil, 'O R I O N  S O L U T I O N S')
+    renderer.text(menu_x + 12 + 40 - 1, menu_y - 22 - 1, 0, 0, 0, 255 * self.menu_alpha, nil, nil, 'O R I O N  S O L U T I O N S')
+    renderer.text(menu_x + 12 + 40 + 2, menu_y - 22 + 2, 0, 0, 0, 255 * self.menu_alpha, nil, nil, 'O R I O N  S O L U T I O N S')
     renderer.text(menu_x + 12 + 40 + 1, menu_y - 22 + 1, 255, 255, 255, 255 * self.menu_alpha, nil, nil, gradient_text)
-    renderer.text(menu_x + 12 + 40, menu_y - 22, 255, 255, 255, 255 * self.menu_alpha, nil, nil, "O R I O N  S O L U T I O N S")
+    renderer.text(menu_x + 12 + 40, menu_y - 22, 255, 255, 255, 255 * self.menu_alpha, nil, nil, 'O R I O N  S O L U T I O N S')
 
     local current_time = globals.realtime()
     if self.start_time2 + 3 < current_time then
@@ -1193,9 +1537,9 @@ WaterMark = function()
     end
 
     local Latency = math.floor(client.latency() * 1000 + 0.5)
-    local pingText = "Ping: " .. tostring(Latency) .. "MS"
-    local versionText = Globals.UserData.Version or "Unknown"
-    local fullText = "Orion Solutions • " .. Globals.UserData.Username .. " • " .. pingText .. " • " .. versionText
+    local pingText = 'Ping: ' .. tostring(Latency) .. 'MS'
+    local versionText = Globals.UserData.Version or 'Unknown'
+    local fullText = 'Orion Solutions • ' .. Globals.UserData.Username .. ' • ' .. pingText .. ' • ' .. versionText
     local TextWidth, TextHeight = renderer.measure_text(nil, fullText)
     local Left = Globals.ScreenX - TextWidth - 25
 
@@ -1208,21 +1552,21 @@ WaterMark = function()
 
     -- draw watermark text
     local currentX = Left - 10
-    renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, "Orion Solutions •")
-    currentX = currentX + renderer.measure_text(nil, "Orion Solutions •")
+    renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, 'Orion Solutions •')
+    currentX = currentX + renderer.measure_text(nil, 'Orion Solutions •')
 
-    local userText = " " .. Globals.UserData.Username
+    local userText = ' ' .. Globals.UserData.Username
     renderer.text(currentX, 10 + TextHeight/4, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a, nil, 200, userText)
     currentX = currentX + renderer.measure_text(nil, userText)
 
-    renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, " • ")
-    currentX = currentX + renderer.measure_text(nil, " • ")
+    renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, ' • ')
+    currentX = currentX + renderer.measure_text(nil, ' • ')
 
     renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, pingText)
     currentX = currentX + renderer.measure_text(nil, pingText)
 
-    renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, " • ")
-    currentX = currentX + renderer.measure_text(nil, " • ")
+    renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, ' • ')
+    currentX = currentX + renderer.measure_text(nil, ' • ')
 
     renderer.text(currentX, 10 + TextHeight/4, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a, nil, 200, versionText)
 
@@ -1238,7 +1582,7 @@ WaterMark = function()
         end
 
         -- circular PFP render
-        renderer.texture(tex, Left - 28, 13, 15, 15, 255, 255, 255, 255, "f")
+        renderer.texture(tex, Left - 28, 13, 15, 15, 255, 255, 255, 255, 'f')
         renderer.circle_outline(Left - 20, 20, 23, 23, 23, 255, 10, 0, 1, 3)
     end)
 end
@@ -1251,29 +1595,29 @@ local HitgroupNames = {'Generic', 'Head', 'Chest', 'Stomach', 'Left Arm', 'right
 
 DrawLog = function(text, x, y, r, g, b, a, text2)
      -- measure main text (right body)
-    local width, height = renderer.measure_text("b", text)
+    local width, height = renderer.measure_text('b', text)
     height = math.max(20, height + 6) -- keep min height = 20
 
-    if text2 == "Hit" then
+    if text2 == 'Hit' then
         r = 0
         g = 255
         b = 0
-    elseif text2 == "Miss" then
+    elseif text2 == 'Miss' then
         r = 255
         g = 0
         b = 0
-    elseif text2 == "Casino" then
+    elseif text2 == 'Casino' then
         r = 255
         g = 215
         b = 0
     end
 
     -- measure tag text (left tag)
-    local t2w, t2h = renderer.measure_text("b", text2 or "")
+    local t2w, t2h = renderer.measure_text('b', text2 or '')
 
 
     -- tag width = text2 + 10px (5px padding each side); keep >= 30 for shape integrity
-    local tag_w = math.max(30, (text2 and text2 ~= "" and (t2w + 10) or 30))
+    local tag_w = math.max(30, (text2 and text2 ~= '' and (t2w + 10) or 30))
 
 
     local total_w = tag_w + (width + 40)
@@ -1292,19 +1636,19 @@ DrawLog = function(text, x, y, r, g, b, a, text2)
     renderer.line(x - 2, y - 2, x - 12, y - 2 + height + 1, r, g, b, a)
 
     renderer.line(x + tag_w + 11, y - 1, x + tag_w + 1, y - 1 + height, 10, 10, 10, a)
-    renderer.text(x + tag_w + 15, y + math.floor((height - (height - 6)) / 2), 255, 255, 255, a, "b", 0, text)
+    renderer.text(x + tag_w + 15, y + math.floor((height - (height - 6)) / 2), 255, 255, 255, a, 'b', 0, text)
 
 
     -- draw text2 INSIDE the tag, centered vertically with 5px left padding
-    if text2 and text2 ~= "" then
+    if text2 and text2 ~= '' then
         local t2_y = y + math.floor((height - t2h) / 2)
-        renderer.text(x + 5, t2_y, r, g, b, 255, "b", 0, text2)
+        renderer.text(x + 5, t2_y, r, g, b, 255, 'b', 0, text2)
     end
 
 
     -- optional icon support (kept from your original, but disabled by default)
     -- local icon_texture = renderer.load_png(logo, 23, 23)
-    -- renderer.texture(icon_texture, x + 4, y + math.floor((height - 23) / 2), 23, 23, 255, 255, 255, a, "f")
+    -- renderer.texture(icon_texture, x + 4, y + math.floor((height - 23) / 2), 23, 23, 255, 255, 255, a, 'f')
 
 
     return total_w, height
@@ -1315,7 +1659,7 @@ RenderScreenLogs = function()
         return
     end
 
-    if table.find(Menu.Miscellaneous.Logs.LogsType.value, "Screen") then
+    if table.find(Menu.Miscellaneous.Logs.LogsType.value, 'Screen') then
         local now = globals.curtime()
         local offset = 0
         local logs_to_remove = {}
@@ -1332,14 +1676,14 @@ RenderScreenLogs = function()
                 if elapsed > 3 then
                     table.insert(logs_to_remove, i)
                 else
-                    if s.Hit and table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Hit") then
-                        local HitText = "Hit ".. entity.get_player_name(s.Target) .. " for "..s.Damage.. " in the "..HitgroupNames[s.HitGroup + 1]
-                        local w, h = DrawLog(HitText, (Globals.ScreenX / 2), Globals.ScreenY / 2 + offset, 255, 255, 255, 0, "")
-                        DrawLog(HitText, (Globals.ScreenX / 2) - w/2, (Globals.ScreenY / 2 + offset) + 200, 255, 255, 255, s.Alpha, "Hit")
+                    if s.Hit and table.find(Menu.Miscellaneous.Logs.LogsOption.value, 'Hit') then
+                        local HitText = 'Hit '.. entity.get_player_name(s.Target) .. ' For '..s.Damage.. ' In The '..HitgroupNames[s.HitGroup + 1]
+                        local w, h = DrawLog(HitText, (Globals.ScreenX / 2), Globals.ScreenY / 2 + offset, 255, 255, 255, 0, '')
+                        DrawLog(HitText, (Globals.ScreenX / 2) - w/2, (Globals.ScreenY / 2 + offset) + 200, 255, 255, 255, s.Alpha, 'Hit')
                         offset = offset + h + 10
-                    elseif s.Miss and table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Miss") then
-                        local w, h = DrawLog("Missed ".. entity.get_player_name(s.Target) .. " due to "..s.Reason, (Globals.ScreenX / 2), Globals.ScreenY / 2 + offset, 255, 255, 255, 0, "")
-                        DrawLog("Missed ".. entity.get_player_name(s.Target) .. " due to "..s.Reason, (Globals.ScreenX / 2) - w/2, (Globals.ScreenY / 2 + offset) + 200, 255, 255, 255, s.Alpha, "Miss")
+                    elseif s.Miss and table.find(Menu.Miscellaneous.Logs.LogsOption.value, 'Miss') then
+                        local w, h = DrawLog('Missed '.. entity.get_player_name(s.Target) .. ' Due To '..s.Reason, (Globals.ScreenX / 2), Globals.ScreenY / 2 + offset, 255, 255, 255, 0, '')
+                        DrawLog('Missed '.. entity.get_player_name(s.Target) .. ' Due To '..s.Reason, (Globals.ScreenX / 2) - w/2, (Globals.ScreenY / 2 + offset) + 200, 255, 255, 255, s.Alpha, 'Miss')
                         offset = offset + h + 10
                     end
                 end
@@ -1348,7 +1692,7 @@ RenderScreenLogs = function()
             end
         end
     
-        if table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Casino") then
+        if table.find(Menu.Miscellaneous.Logs.LogsOption.value, 'Casino') then
             -- Process casino logs
             for i = 1, #CasinoLogs do
                 local casino_log = CasinoLogs[i]
@@ -1360,8 +1704,8 @@ RenderScreenLogs = function()
                     if elapsed > 5 then
                         table.insert(logs_to_remove, i + #Logs)  -- Offset by combat logs count
                     else
-                        local w, h = DrawLog(casino_log.Message, (Globals.ScreenX / 2), Globals.ScreenY / 2 + offset, 255, 255, 255, 0, "")
-                        DrawLog(casino_log.Message, (Globals.ScreenX / 2) - w/2, (Globals.ScreenY / 2 + offset) + 200, 255, 255, 255, casino_log.Alpha, "Casino")
+                        local w, h = DrawLog(casino_log.Message, (Globals.ScreenX / 2), Globals.ScreenY / 2 + offset, 255, 255, 255, 0, '')
+                        DrawLog(casino_log.Message, (Globals.ScreenX / 2) - w/2, (Globals.ScreenY / 2 + offset) + 200, 255, 255, 255, casino_log.Alpha, 'Casino')
                         offset = offset + h + 10
                     end
                 end
@@ -1393,7 +1737,7 @@ AntiBackStab = function()
 	dist = lppos:dist(tpos)
 
 	local weapon = entity.get_player_weapon(target)
-	if dist <= Menu.Miscellaneous.AntiBackStab.Distance.value and entity.get_classname(weapon) == "CKnife" then
+	if dist <= Menu.Miscellaneous.AntiBackStab.Distance.value and entity.get_classname(weapon) == 'CKnife' then
 		References.AntiAim.Angles.Yaw[2]:override(180)
 	else
 		References.AntiAim.Angles.Yaw[2]:override(0)
@@ -1405,7 +1749,7 @@ FastLadder = function(cmd)
         return
     end
 
-    if not LocalPlayervalid then
+    if not LocalPlayer.Valid then
         return
     end
 
@@ -1461,146 +1805,6 @@ FastLadder = function(cmd)
     end
 end
 
--- Add these global variables at the top with your other globals
-local DebugPanelData = {
-    x = 100,
-    y = Globals.ScreenY * 0.33,
-    dragging = false,
-    drag_x = 0,
-    drag_y = 0,
-    size = vector(200, 80), -- Estimated size for the panel
-    registered = false -- Track if we've registered with the drag system
-}
-
--- Register the debug panel with the drag system
-local function registerDebugPanelDrag()
-    if not DebugPanelData.registered then
-        drag.register(
-            vector(DebugPanelData.x, DebugPanelData.y), -- position
-            DebugPanelData.size, -- size
-            "debug_panel", -- global name
-            function(self, ...) -- ins_function (will be called in update)
-                -- This function will handle the rendering
-                DebugPanel()
-            end,
-            {0, Globals.ScreenX - DebugPanelData.size.x, 0, Globals.ScreenY - DebugPanelData.size.y}, -- limits
-            false -- outline (set to false since we don't want the drag outline on debug panel)
-        )
-        DebugPanelData.registered = true
-    end
-end
-
-DebugPanel = function()
-    if not Menu.Miscellaneous.DebugPanel:get() then
-        return
-    end
-
-    -- Register with drag system on first call
-    if not DebugPanelData.registered then
-        registerDebugPanelDrag()
-        return
-    end
-
-    local accent_r, accent_g, accent_b = Menu.Miscellaneous.AccentColor:get()
-    local font_flag = "b"  -- Bold font like WRAITH
-    
-    -- Find our drag window data
-    local dragWindow = nil
-    for _, window in pairs(drag.windows) do
-        if window.global_name == "debug_panel" then
-            dragWindow = window
-            break
-        end
-    end
-    
-    if not dragWindow then
-        return
-    end
-    
-    -- Use position from drag system
-    local panel_x = dragWindow.position.x
-    local panel_y = dragWindow.position.y
-    
-    -- Elements with WRAITH-like styling
-    local elements = {
-        { text = "- CONDITION: " .. string.upper(LocalPlayer.State or "UNKNOWN"), r = 240, g = 240, b = 240, a = 220 },
-        { text = "- TARGET: " .. string.upper(LocalPlayer.Threat == nil and "?" or string.sub(entity.get_player_name(LocalPlayer.Threat) or "?", 1, 12)), r = 240, g = 240, b = 240, a = 220 },
-        { text = "- EXPLOIT: " .. (References.Rage.Aimbot.DoubleTap[1]:get() and "CHARGED" or "READY"), r = 240, g = 240, b = 240, a = 220 },
-        { text = "- ORION: " .. (Globals.UserData.Version or "LIVE"), r = 240, g = 240, b = 240, a = 220 }
-    }
-    
-    -- Calculate panel size
-    local max_width = 0
-    local text_height = 0
-    for i, element in ipairs(elements) do
-        local w, h = renderer.measure_text(font_flag, element.text)
-        max_width = math.max(max_width, w)
-        if i == 1 then text_height = h end
-    end
-    
-    local bg_padding_x = 18
-    local bg_padding_y = 7
-    local bg_width = max_width + bg_padding_x * 2
-    local bg_height = text_height * #elements + bg_padding_y * 2
-    
-    -- Update the size in drag system if needed
-    if dragWindow.size.x ~= bg_width or dragWindow.size.y ~= bg_height then
-        dragWindow.size = vector(bg_width, bg_height)
-    end
-    
-    -- WRAITH-style gradient background
-    renderer.gradient(panel_x, panel_y, bg_width / 1.5, bg_height, 12, 12, 12, 0, 12, 12, 12, 75, true)
-    renderer.gradient(panel_x + bg_width / 1.5, panel_y, bg_width / 1.5, bg_height, 12, 12, 12, 75, 12, 12, 12, 0, true)
-    
-    -- Gradient line
-    renderer.gradient(panel_x, panel_y + bg_height, bg_width / 1.5, 1, 0, 0, 0, 0, 220, 220, 220, 220, true)
-    renderer.gradient(panel_x + bg_width / 1.5, panel_y + bg_height, bg_width / 1.5, 1, 220, 220, 220, 255, 0, 0, 0, 0, true)
-    
-    -- Draw elements with colored values
-    for i, element in ipairs(elements) do
-        local text = element.text
-        local w, h = renderer.measure_text(font_flag, text)
-        
-        local prefix_end = text:find(": ")
-        if prefix_end then
-            local prefix = text:sub(1, prefix_end + 1)
-            local value = text:sub(prefix_end + 2)
-            
-            -- White prefix
-            renderer.text(panel_x + bg_padding_x, panel_y + bg_padding_y + (h * (i - 1)), 
-                         255, 255, 255, element.a, font_flag, 0, prefix)
-            
-            -- Accent colored value
-            local prefix_w = renderer.measure_text(font_flag, prefix)
-            renderer.text(panel_x + bg_padding_x + prefix_w, panel_y + bg_padding_y + (h * (i - 1)), 
-                         accent_r, accent_g, accent_b, element.a, font_flag, 0, value)
-        else
-            renderer.text(panel_x + bg_padding_x, panel_y + bg_padding_y + (h * (i - 1)), 
-                         element.r, element.g, element.b, element.a, font_flag, 0, text)
-        end
-    end
-end
-
--- Update the paint_ui callback to use the drag system
-client.set_event_callback("paint_ui", function()
-    if not Globals.UserData.LoggedIN then
-        return
-    end
-
-    -- Your existing paint_ui code...
-    
-    if Menu.Miscellaneous.DebugPanel:get() then
-        -- The drag system will automatically call DebugPanel through the registered function
-        -- We just need to find our drag window and call update
-        for _, window in pairs(drag.windows) do
-            if window.global_name == "debug_panel" then
-                window:update()
-                break
-            end
-        end
-    end
-end)
-
 AutoBuy = function()
     for k, v in pairs(Commands) do
         if k == Menu.Miscellaneous.BuyBot.Primary.value then
@@ -1640,19 +1844,19 @@ AutoBuy = function()
 end
 
 local ClantagFrames = {
-    "[✦Orion✦]",
-    "[✦Orion]",
-    "[✦Orio]",
-    "[✦Ori]",
-    "[✦Or]",
-    "[✦O]",
-    "[✦]",
-    "[✦O]",
-    "[✦Or]",
-    "[✦Ori]",
-    "[✦Orio]",
-    "[✦Orion]",
-    "[✦Orion✦]",
+    '[✦Orion✦]',
+    '[✦Orion]',
+    '[✦Orio]',
+    '[✦Ori]',
+    '[✦Or]',
+    '[✦O]',
+    '[✦]',
+    '[✦O]',
+    '[✦Or]',
+    '[✦Ori]',
+    '[✦Orio]',
+    '[✦Orion]',
+    '[✦Orion✦]',
 }
 
 ClanTag = function(Tag)
@@ -1661,41 +1865,69 @@ end
 
 MenuUpdate = function()
 
-    References.AntiAim.Angles.Enable:depend({Menu.Tabs, "yg"})
-    References.AntiAim.Angles.Pitch[1]:depend({Menu.Tabs, "Anti-Aim"})
-    References.AntiAim.Angles.Pitch[2]:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.YawBase:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.Yaw[1]:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.Yaw[2]:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.YawJitter[1]:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.YawJitter[2]:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.BodyYaw[1]:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.BodyYaw[2]:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.EdgeYaw:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.FreestandingBodyYaw:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.Freestanding:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.Freestanding.hotkey:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Angles.Roll:depend({Menu.Tabs, "Anti-Aim"})
+    References.AntiAim.Angles.Enable:depend({Menu.Tabs, 'yg'})
+    References.AntiAim.Angles.Pitch[1]:depend({Menu.Tabs, 'yg'})
+    References.AntiAim.Angles.Pitch[2]:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.YawBase:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.Yaw[1]:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.Yaw[2]:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.YawJitter[1]:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.YawJitter[2]:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.BodyYaw[1]:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.BodyYaw[2]:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.EdgeYaw:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.FreestandingBodyYaw:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.Freestanding:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.Freestanding.hotkey:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.Angles.Roll:depend({Menu.Tabs, 'yg'})
 
-    References.AntiAim.Other.SlowWalk:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Other.SlowWalk.hotkey:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Other.Legs:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Other.OnShot:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Other.OnShot.hotkey:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Other.FakePeek:depend({Menu.Tabs, "Anti-Aim"})
-	References.AntiAim.Other.FakePeek.hotkey:depend({Menu.Tabs, "Anti-Aim"})
+    References.AntiAim.Other.SlowWalk:depend({Menu.Tabs, 'Anti-Aim'})
+	References.AntiAim.Other.SlowWalk.hotkey:depend({Menu.Tabs, 'Anti-Aim'})
+	References.AntiAim.Other.Legs:depend({Menu.Tabs, 'Anti-Aim'})
+	References.AntiAim.Other.OnShot:depend({Menu.Tabs, 'Anti-Aim'})
+	References.AntiAim.Other.OnShot.hotkey:depend({Menu.Tabs, 'Anti-Aim'})
+	References.AntiAim.Other.FakePeek:depend({Menu.Tabs, 'Anti-Aim'})
+	References.AntiAim.Other.FakePeek.hotkey:depend({Menu.Tabs, 'Anti-Aim'})
 
-	References.AntiAim.FakeLag.Enable:depend({Menu.Tabs, "yg"})
-	References.AntiAim.FakeLag.Enable.hotkey:depend({Menu.Tabs, "yg"})
-	References.AntiAim.FakeLag.Variance:depend({Menu.Tabs, "yg"})
-	References.AntiAim.FakeLag.Amount:depend({Menu.Tabs, "yg"})
-	References.AntiAim.FakeLag.Limit:depend({Menu.Tabs, "yg"})
+	References.AntiAim.FakeLag.Enable:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.FakeLag.Enable.hotkey:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.FakeLag.Variance:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.FakeLag.Amount:depend({Menu.Tabs, 'yg'})
+	References.AntiAim.FakeLag.Limit:depend({Menu.Tabs, 'yg'})
+
+    Menu.AntiAim.FakeLag.EnableFakeLag.on:set_callback(function(self)
+        References.AntiAim.FakeLag.Enable:set(self:get())
+    end, true)
+
+    Menu.AntiAim.FakeLag.EnableFakeLag.Amount:set_callback(function(self)
+        if Menu.AntiAim.FakeLag.EnableFakeLag.on:get() then
+            pcall(function()
+                References.AntiAim.FakeLag.Amount:set(self:get())
+            end)
+        end
+    end, true)
+
+    Menu.AntiAim.FakeLag.EnableFakeLag.Variance:set_callback(function(self)
+        if Menu.AntiAim.FakeLag.EnableFakeLag.on:get() then
+            References.AntiAim.FakeLag.Variance:set(self:get())
+        end
+    end, true)
+
+    Menu.AntiAim.FakeLag.EnableFakeLag.Limit:set_callback(function(self)
+        if Menu.AntiAim.FakeLag.EnableFakeLag.on:get() then
+            References.AntiAim.FakeLag.Limit:set(self:get())
+        end
+    end, true)
+
+    Menu.AntiAim.FakeLag.EnableFakeLag.Limit:set_callback(function(self)
+        References.AntiAim.FakeLag.Limit:set(self:get())
+    end, true)
 
     if Globals.UserData.LoggedIN then
-        Menu.Auth.StatusLabel:override("Status: Loading...")
+        Menu.Auth.StatusLabel:override('Status: Loading...')
         Menu.LOGGEDIN:set(true)
     else
-        Menu.Auth.StatusLabel:override("Status: Not Logged In")
+        Menu.Auth.StatusLabel:override('Status: Not Logged In')
         Menu.LOGGEDIN:set(false)
     end
 
@@ -1715,11 +1947,11 @@ MenuUpdate = function()
 	end)
 
     pui.traverse(Menu.Home, function(ref, path)
-		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, "Home"})
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Home'})
 	end)
 
-    pui.traverse({Menu.Home.ConfigSystem.NewConfigHeader, Menu.Home.ConfigSystem.Name, Menu.Home.ConfigSystem.Create, Menu.Home.ConfigSystem.Import}, function(ref, path)
-        ref:depend({Menu.LOGGEDIN, true}, {Menu.Home.ConfigSystem.Type, "Local"})
+    pui.traverse({Menu.Home.ConfigSystem.NewConfigHeader, Menu.Home.ConfigSystem.Name, Menu.Home.ConfigSystem.Create, Menu.Home.ConfigSystem.Import, Menu.Home.ConfigSystem.Export, Menu.Home.ConfigSystem.Upload}, function(ref, path)
+        ref:depend({Menu.LOGGEDIN, true}, {Menu.Home.ConfigSystem.Type, 'Local'})
     end)
 
     pui.traverse(Menu.MainHeader, function(ref, path)
@@ -1727,44 +1959,164 @@ MenuUpdate = function()
 	end)
 
     pui.traverse(Menu.Rage, function(ref, path)
-		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, "Rage"})
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Rage'})
 	end)
 
     pui.traverse(Menu.AntiAim, function(ref, path)
-		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, "Anti-Aim"})
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Anti-Aim'})
+	end)
+
+    pui.traverse(Menu.AntiAim.ConditionSettings.Builder, function(ref, path)
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.AntiAim.AntiAimType, 'Builder'})
+	end)
+
+    pui.traverse(Menu.AntiAim.ConditionSettings.Defensive, function(ref, path)
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.AntiAim.AntiAimType, 'Defensive'})
 	end)
 
     pui.traverse(Menu.Visuals, function(ref, path)
-		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, "Visuals"})
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Visuals'})
 	end)
 
     pui.traverse(Menu.Miscellaneous, function(ref, path)
-		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, "Miscellaneous"})
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Miscellaneous'})
 	end)
     pui.traverse(Menu.Casino, function(ref, path)
-		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, "Casino"})
+		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Casino'})
 	end)
     
-    Menu.Casino.BetAmount:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
-    Menu.Casino.BetAmountLabel:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
-    Menu.Casino.Flip:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, "Coin Flip"})
-    --Menu.Home.ConfigSystem.Type:set_enabled(false)
+    Menu.Casino.BetAmount:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, 'Coin Flip'})
+    Menu.Casino.BetAmountLabel:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, 'Coin Flip'})
+    Menu.Casino.Flip:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, 'Coin Flip'})
 
-    --Menu.Home.ConfigSystem.Upload:depend({Menu.LOGGEDIN, true}, {Menu.Home.ConfigSystem.Type, "Cloud"})
+    Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:set_callback(function(self)
+        local selectedCondition = self:get()
+        Menu.AntiAim.ConditionSettings.Builder.Pitch:set(AA.ConditionSystem.Pitch[selectedCondition] or "Off")
+        Menu.AntiAim.ConditionSettings.Builder.Yaw:set(AA.ConditionSystem.Yaw[selectedCondition] or "180")
+        Menu.AntiAim.ConditionSettings.Builder.YawOffset:set(AA.ConditionSystem.YawOffset[selectedCondition] or 0)
+        Menu.AntiAim.ConditionSettings.Builder.YawJitter:set(AA.ConditionSystem.YawJitter[selectedCondition] or "Off")
+        Menu.AntiAim.ConditionSettings.Builder.YawJitterOffset:set(AA.ConditionSystem.YawJitterOffset[selectedCondition] or 0)
+        Menu.AntiAim.ConditionSettings.Builder.BodyYaw:set(AA.ConditionSystem.BodyYawMode[selectedCondition] or "Off")
+        Menu.AntiAim.ConditionSettings.Builder.BodyYawOffset:set(AA.ConditionSystem.BodyYawOffset[selectedCondition] or 0)
+        Menu.AntiAim.ConditionSettings.Builder.FreestandingBodyYaw:set(AA.ConditionSystem.FreestandingBodyYaw[selectedCondition] or false)
+        Menu.AntiAim.ConditionSettings.Builder.EdgeYaw:set(AA.ConditionSystem.EdgeYaw[selectedCondition] or false)
+        Menu.AntiAim.ConditionSettings.Builder.Freestanding:set(AA.ConditionSystem.Freestanding[selectedCondition] or false)
+        Menu.AntiAim.ConditionSettings.Builder.Roll:set(AA.ConditionSystem.Roll[selectedCondition] or 0)
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.Pitch:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.Pitch[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.Yaw:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.Yaw[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.YawOffset:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.YawOffset[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.YawJitter:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.YawJitter[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.YawJitterOffset:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.YawJitterOffset[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.BodyYaw:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.BodyYawMode[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.BodyYawOffset:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.BodyYawOffset[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.FreestandingBodyYaw:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.FreestandingBodyYaw[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.EdgeYaw:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.EdgeYaw[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.Freestanding:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.Freestanding[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Builder.Roll:set_callback(function(self)
+        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
+        AA.ConditionSystem.Roll[selectedCondition] = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensiveEnabled:set_callback(function(self)
+        AA.ConditionSystem.Defensive.Enabled = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensiveForce:set_callback(function(self)
+        AA.ConditionSystem.Defensive.Force = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensiveDuration:set_callback(function(self)
+        AA.ConditionSystem.Defensive.Duration = self:get()
+        AA.ConditionSystem.Defensive.MaxTicks = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensiveDisablers:set_callback(function(self)
+        AA.ConditionSystem.Defensive.Disablers = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensivePitch:set_callback(function(self)
+        AA.ConditionSystem.Defensive.Pitch = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensivePitchValue:set_callback(function(self)
+        AA.ConditionSystem.Defensive.PitchValue = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensiveYaw:set_callback(function(self)
+        AA.ConditionSystem.Defensive.Yaw = self:get()
+    end)
+
+    Menu.AntiAim.ConditionSettings.Defensive.DefensiveYawValue:set_callback(function(self)
+        AA.ConditionSystem.Defensive.YawValue = self:get()
+    end)
 end
+
+client.set_event_callback('paint_ui', function()
+    References.AntiAim.Angles.Yaw[1]:set_visible(false)
+    References.AntiAim.Angles.Yaw[2]:set_visible(false)
+
+    References.AntiAim.Angles.YawJitter[1]:set_visible(false)
+    References.AntiAim.Angles.YawJitter[2]:set_visible(false)
+
+    References.AntiAim.Angles.BodyYaw[1]:set_visible(false)
+    References.AntiAim.Angles.BodyYaw[2]:set_visible(false)
+    References.AntiAim.Angles.FreestandingBodyYaw:set_visible(false)
+end)
 
 MenuUpdate()
 setup_aspect_ratio()
 
 GetNextUserID = function(callback)
-    FireBase.read(PATHS.Settings .. "/last_user_id", function(success, id)
+    FireBase.read(PATHS.Settings .. '/last_user_id', function(success, id)
         if success and id then
             last_user_id = tonumber(id) or 1
         else
             last_user_id = 1
         end
         last_user_id = last_user_id + 1
-        FireBase.write(PATHS.Settings .. "/last_user_id", last_user_id, function()
+        FireBase.write(PATHS.Settings .. '/last_user_id', last_user_id, function()
             callback(last_user_id)
         end)
     end)
@@ -1776,12 +2128,12 @@ SaveCredentials = function(username, password)
         password = password,
         timestamp = Time.UnixTime()
     }
-    database.write("orion_credentials", json.stringify(credentials))
+    database.write('orion_credentials', json.stringify(credentials))
 end
 
 -- Add this function to load credentials
 LoadCredentials = function()
-    local saved = database.read("orion_credentials")
+    local saved = database.read('orion_credentials')
     if saved then
         local ok, credentials = pcall(json.parse, saved)
         if ok and credentials and credentials.username and credentials.password then
@@ -1791,10 +2143,10 @@ LoadCredentials = function()
     return nil, nil
 end
 
-local real_password = ""
+local real_password = ''
 local last_password_len = 0
 
-client.set_event_callback("paint_ui", function()
+client.set_event_callback('paint_ui', function()
     if not Globals.UserData.LoggedIN then
         local current_input = Menu.Auth.PassWord:get()
         local current_len = #current_input
@@ -1805,7 +2157,7 @@ client.set_event_callback("paint_ui", function()
                 -- Added characters
                 local new_chars = current_input:sub(last_password_len + 1)
                 real_password = real_password .. new_chars
-                Menu.Auth.PassWord:set(string.rep("*", #real_password))
+                Menu.Auth.PassWord:set(string.rep('*', #real_password))
             else
                 -- Removed characters (backspace/delete)
                 real_password = real_password:sub(1, current_len)
@@ -1827,16 +2179,16 @@ local function updateOnlineStatus()
             last_active = Time.UnixTime(),  -- Use Unix timestamp for calculations
             login_time = Time.RealTime(),    -- Formatted time for display
             is_admin = Globals.UserData.IsAdmin,
-            version = Globals.UserData.Version or "Live",
+            version = Globals.UserData.Version or 'Live',
             steamid = Globals.UserData.SteamID,
             userid = Globals.UserData.UserID,
-            profileImage = Globals.UserData.ProfileImage or ""  -- Add profile image if available
+            profileImage = Globals.UserData.ProfileImage or ''  -- Add profile image if available
         }
     }
     
     FireBase.update(PATHS.OnlineUsers, online_data, function(success, error)
         if not success then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Firebase\f<r>] Failed to update online status")))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Firebase\f<z>] Failed to update online status')))
         end
     end)
 end
@@ -1854,7 +2206,7 @@ local function getOnlineUsersCount(callback)
         
         -- Check each user and count active ones (within last 2 minutes)
         for user_id, user_data in pairs(users) do
-            if user_data and type(user_data) == "table" and user_data.last_active then
+            if user_data and type(user_data) == 'table' and user_data.last_active then
                 local time_diff = current_time - user_data.last_active
                 if time_diff <= 120 then  -- 2 minutes = active
                     count = count + 1
@@ -1869,7 +2221,7 @@ end
 Login = function(username, password, remember)
     -- Check if this is an auto-login attempt
     local is_auto_login = false
-    local saved = database.read("orion_credentials")
+    local saved = database.read('orion_credentials')
     if saved then
         local ok, credentials = pcall(json.parse, saved)
         if ok and credentials and credentials.username == username and credentials.password == password then
@@ -1877,9 +2229,9 @@ Login = function(username, password, remember)
         end
     end
 
-    FireBase.read(PATHS.Users .. "/" .. username, function(success, user)
+    FireBase.read(PATHS.Users .. '/' .. username, function(success, user)
         if not success then
-            Menu.Auth.StatusLabel:override("Database error")
+            Menu.Auth.StatusLabel:override('Database error')
             return
         end
 
@@ -1889,29 +2241,29 @@ Login = function(username, password, remember)
         end
 
         if not user.password or not user.userid then
-            Menu.Auth.StatusLabel:override("Invalid account data")
+            Menu.Auth.StatusLabel:override('Invalid account data')
             return
         end
 
         if user.password ~= password then
-            Menu.Auth.StatusLabel:override("Wrong password")
+            Menu.Auth.StatusLabel:override('Wrong password')
             return
         end
 
         -- SteamID verification
         local current_steamid = panorama.open().MyPersonaAPI.GetXuid()
         if user.steamid and user.steamid ~= current_steamid then
-            Menu.Auth.StatusLabel:override("Account Is Locked To Another HWID")
+            Menu.Auth.StatusLabel:override('Account Is Locked To Another HWID')
             return
         end
 
         -- If no SteamID is stored yet, store it now
         if not user.steamid then
-            FireBase.update(PATHS.Users .. "/" .. username, {
+            FireBase.update(PATHS.Users .. '/' .. username, {
                 steamid = current_steamid
             }, function(update_success)
                 if not update_success then
-                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Firebase\f<r>] Failed To Store HWID For User: \f<ez>%s", username)))
+                    utils.printc(pui.format(string.format('\f<z>[\f<orion>Firebase\f<z>] Failed To Store HWID For User: \f<orion>%s', username)))
                 end
             end)
         end
@@ -1923,7 +2275,7 @@ Login = function(username, password, remember)
                 last_active = Time.UnixTime(),
                 login_time = Time.RealTime(),
                 is_admin = user.is_admin or false,
-                version = user.version or "Live",
+                version = user.version or 'Live',
                 steamid = current_steamid  -- Include SteamID in online users
             }
         }
@@ -1941,7 +2293,7 @@ Login = function(username, password, remember)
                 Globals.UserData.Username = username
                 Globals.UserData.UserID = userid_str
                 Globals.UserData.IsAdmin = user.is_admin or false
-                Globals.UserData.Version = user.version or "Live"
+                Globals.UserData.Version = user.version or 'Live'
                 Globals.UserData.SteamID = current_steamid
                 Globals.UserData.LoginTime = Time.RealTime()
                 
@@ -1951,14 +2303,14 @@ Login = function(username, password, remember)
                 end
                 
                 MenuUpdate()
-                Menu.Auth.StatusLabel:override("Login successful")
+                Menu.Auth.StatusLabel:override('Login successful')
                 
                 -- Update menu with stats
                 if Menu.Stats then
-                    Menu.Stats.KillCounter:override("\f<silent>Kills: \v" .. Globals.UserData.Stats.KillCount)
-                    Menu.Stats.CoinCounter:override("\f<silent>Coins: \v" .. Globals.UserData.Stats.Coins)
-                    Menu.Stats.TimesLoaded:override("\f<silent>Times Loaded: \v" .. Globals.UserData.Stats.TimesLoaded)
-                    Menu.Casino.Balance:override("\f<silent>Balance: \v" .. Globals.UserData.Stats.Coins)
+                    Menu.Stats.KillCounter:override('\f<silent>Kills: \v' .. Globals.UserData.Stats.KillCount)
+                    Menu.Stats.CoinCounter:override('\f<silent>Coins: \v' .. Globals.UserData.Stats.Coins)
+                    Menu.Stats.TimesLoaded:override('\f<silent>Times Loaded: \v' .. Globals.UserData.Stats.TimesLoaded)
+                    Menu.Casino.Balance:override('\f<silent>Balance: \v' .. Globals.UserData.Stats.Coins)
                 end
                 
                 -- Initialize online users count after successful login
@@ -1967,7 +2319,7 @@ Login = function(username, password, remember)
                 end)
                 
             else
-                Menu.Auth.StatusLabel:override("Status update failed")
+                Menu.Auth.StatusLabel:override('Status update failed')
             end
         end)
 
@@ -2008,12 +2360,12 @@ Menu.Casino.Flip:set_callback(function()
     local Amount = tonumber(Menu.Casino.BetAmount:get())
 
     if not IsNumber(Amount) or Amount == nil or Amount <= 0 then 
-        AddCasinoLog("Invalid Bet Amount")
+        AddCasinoLog('Invalid Bet Amount')
         return 
     end
 
     if Amount > Globals.UserData.Stats.Coins then
-        AddCasinoLog("Not enough Coins to bet")
+        AddCasinoLog('Not enough Coins to bet')
         return
     end
 
@@ -2022,9 +2374,9 @@ Menu.Casino.Flip:set_callback(function()
     if client.random_int(0, 1) == 0 then 
         local Winnings = Amount * 2
         Globals.UserData.Stats.Coins = Globals.UserData.Stats.Coins + Winnings
-        AddCasinoLog("You Won: "..Winnings.." Coins! (Bet: "..Amount..") | New Balance: "..Globals.UserData.Stats.Coins)
+        AddCasinoLog('You Won: '..Winnings..' Coins! (Bet: '..Amount..') | New Balance: '..Globals.UserData.Stats.Coins)
     else
-        AddCasinoLog("You Lost: "..Amount.." Coins | New Balance: "..Globals.UserData.Stats.Coins)
+        AddCasinoLog('You Lost: '..Amount..' Coins | New Balance: '..Globals.UserData.Stats.Coins)
     end
 
     SaveStatsToFirebase()
@@ -2033,17 +2385,24 @@ end)
 Menu.Miscellaneous.AccentColor:set_callback(function(this)
     local r, g, b, a = unpack(this.value)
     colors.accent = color.rgb(r, g, b, a)
-    colors.hex = "\a".. colors.accent:to_hex()
+    colors.hex = '\a'.. colors.accent:to_hex()
 	colors.hexs = string.sub(colors.hex, 1, -3)
 
     References.Miscellaneous.Settings.MenuColor:set(Menu.Miscellaneous.AccentColor.value)
 end, true)
 
+--Menu.Miscellaneous.Filter:set_callback(function(self)
+--    client.delay_call(0, function()
+--        cvar.con_filter_enable:set_int(self.value and 1 or 0)
+--        cvar.con_filter_text:set_string(self.value and 'Orion Solutions ['..Globals.UserData.Version ..']' or '')
+--    end)
+--end, true)
+
 local Y = 0  -- Initialize with default value
 local Alpha = 255
 local ShowLoding = true
 
-client.set_event_callback("paint_ui", function()
+client.set_event_callback('paint_ui', function()
     if not Globals.UserData.LoggedIN then
         return
     end
@@ -2069,22 +2428,23 @@ client.set_event_callback("paint_ui", function()
     LocalPlayer.Entity = entity.get_local_player()
     LocalPlayer.Valid = LocalPlayer.Entity and entity.is_alive(LocalPlayer.Entity)
 
+    local Screen = vector(client.screen_size())
     WaterMark()
     RenderScreenLogs()
 
     if Globals.UserData.LoggedIN then
-        Menu.Home.Statistics.KillCounter:override(pui.macros.silent .. "Kills: \v" .. Globals.UserData.Stats.KillCount)
-        Menu.Home.Statistics.CoinCounter:override(pui.macros.silent .. "Coins: \v" .. Globals.UserData.Stats.Coins)
-        Menu.Home.Statistics.TimesLoadedCounter:override(pui.macros.silent .. "Times Loaded: \v" .. Globals.UserData.Stats.TimesLoaded)
-        Menu.Home.Statistics.OnlineUsers:override(pui.macros.silent .. "Online: \v" .. Globals.OnlineUsers)
-        Menu.Casino.Balance:override(pui.macros.silent .. "Balance: \v" .. Globals.UserData.Stats.Coins)
+        Menu.Home.Statistics.KillCounter:override(pui.macros.silent .. 'Kills: \v' .. Globals.UserData.Stats.KillCount)
+        Menu.Home.Statistics.CoinCounter:override(pui.macros.silent .. 'Coins: \v' .. Globals.UserData.Stats.Coins)
+        Menu.Home.Statistics.TimesLoadedCounter:override(pui.macros.silent .. 'Times Loaded: \v' .. Globals.UserData.Stats.TimesLoaded)
+        Menu.Home.Statistics.OnlineUsers:override(pui.macros.silent .. 'Online: \v' .. Globals.OnlineUsers)
+        Menu.Casino.Balance:override(pui.macros.silent .. 'Balance: \v' .. Globals.UserData.Stats.Coins)
     end
 end)
 
 
 local BulletTracerQueue = {}
 
-client.set_event_callback("paint", function()
+client.set_event_callback('paint', function()
     if not Globals.UserData.LoggedIN then
         return
     end
@@ -2104,7 +2464,7 @@ client.set_event_callback("paint", function()
     end
 
     if not Menu.Miscellaneous.ClanTag:get() then
-        ClanTag("")
+        ClanTag('')
         return
     else
         local tick = globals.tickcount()
@@ -2113,6 +2473,8 @@ client.set_event_callback("paint", function()
         local CurrentTag = ClantagFrames[frame_index]
         ClanTag(CurrentTag)
     end
+
+    cvar.cam_idealdist:set_raw_float(100)
 end)
 
 client.delay_call(8, function()
@@ -2127,10 +2489,10 @@ SaveStatsToFirebase = function()
 
     -- Prepare update
     local update_data = {
-        ["stats"] = Globals.UserData.Stats
+        ['stats'] = Globals.UserData.Stats
     }
 
-    FireBase.update(PATHS.Users .. "/" .. Globals.UserData.Username, update_data, function(success, error)
+    FireBase.update(PATHS.Users .. '/' .. Globals.UserData.Username, update_data, function(success, error)
         if success then
         else
         end
@@ -2148,7 +2510,7 @@ UpdateStats = function(kills, coins, loaded)
 end
 
 -- Track player kills and coins
-client.set_event_callback("player_death", function(e)
+client.set_event_callback('player_death', function(e)
     if not Globals.UserData.LoggedIN then
         return
     end
@@ -2183,15 +2545,23 @@ end
 local BackTrackCache = {}
 local MAX_BACKTRACK_RECORDS = 64
 local BACKTRACK_CLEANUP_INTERVAL = 30
-local last_cleanup_time = globals.curtime()
+local LastCleanupTime = globals.curtime()
+
+ShouldCleanup = function()
+    return globals.curtime() - LastCleanupTime >= BACKTRACK_CLEANUP_INTERVAL
+end
 
 CleanupBackTrackCache = function()
-    local current_time = globals.curtime()
-    if current_time - last_cleanup_time < BACKTRACK_CLEANUP_INTERVAL then
+    local CurrentTime = globals.curtime()
+    --if CurrentTime - LastCleanupTime < BACKTRACK_CLEANUP_INTERVAL then
+    --    return
+    --end
+
+    if not ShouldCleanup() then
         return
     end
     
-    last_cleanup_time = current_time
+    LastCleanupTime = CurrentTime
 
     for player, records in pairs(BackTrackCache) do
         if not entity.is_alive(player) then
@@ -2219,12 +2589,12 @@ UpdateNetvars = function(cmd)
     LocalPlayer.CommandNumber = cmd.command_number
 
     if LocalPlayer.Valid then
-        local velocity = vector(entity.get_prop(LocalPlayer.Entity, "m_vecVelocity"))
+        local velocity = vector(entity.get_prop(LocalPlayer.Entity, 'm_vecVelocity'))
         LocalPlayer.Velocity = velocity:length2d()
-        LocalPlayer.Origin = vector(entity.get_prop(LocalPlayer.Entity, "m_vecOrigin"))
-        LocalPlayer.Scoped = entity.get_prop(LocalPlayer.Entity, "m_bIsScoped") == 1
+        LocalPlayer.Origin = vector(entity.get_prop(LocalPlayer.Entity, 'm_vecOrigin'))
+        LocalPlayer.Scoped = entity.get_prop(LocalPlayer.Entity, 'm_bIsScoped') == 1
         LocalPlayer.Weapon = entity.get_player_weapon(LocalPlayer.Entity)
-        LocalPlayer.MoveType = entity.get_prop(LocalPlayer.Entity, "m_MoveType")
+        LocalPlayer.MoveType = entity.get_prop(LocalPlayer.Entity, 'm_MoveType')
         LocalPlayer.Threat = client.current_threat()
         LocalPlayer.Jumping = cmd.in_jump == 1
         LocalPlayer.InScore = cmd.in_score == 1
@@ -2255,7 +2625,7 @@ client.set_event_callback('setup_command', function(cmd)
                 BackTrackCache[Player] = {}
             end
 
-            local simtime = entity.get_prop(Player, "m_flSimulationTime")
+            local simtime = entity.get_prop(Player, 'm_flSimulationTime')
             if simtime then
                 table.insert(BackTrackCache[Player], simtime)
 
@@ -2265,7 +2635,7 @@ client.set_event_callback('setup_command', function(cmd)
             end
 
             if #BackTrackCache[Player] > 0 then
-                entity.set_prop(Player, "m_flSimulationTime", BackTrackCache[Player][#BackTrackCache[Player]])
+                entity.set_prop(Player, 'm_flSimulationTime', BackTrackCache[Player][#BackTrackCache[Player]])
             end
         end
         
@@ -2278,10 +2648,12 @@ client.set_event_callback('setup_command', function(cmd)
     ImprovedPrediction()
     UpdateNetvars(cmd)
     FastLadder(cmd)
+    LocalPlayerState(cmd)
+    AntiAim(cmd)
 
-    local air_strafe = ui.reference("Misc", "Movement", "Air strafe")
+    local air_strafe = ui.reference('Misc', 'Movement', 'Air strafe')
     if Menu.Rage.JumpScout:get() then
-        local vel_x, vel_y = entity.get_prop(entity.get_local_player(), "m_vecVelocity")
+        local vel_x, vel_y = entity.get_prop(entity.get_local_player(), 'm_vecVelocity')
         local vel = math.sqrt(vel_x^2 + vel_y^2)
         ui.set(air_strafe, not (cmd.in_jump and (vel < 10)) or ui.is_menu_open())
     end
@@ -2289,28 +2661,28 @@ end)
 
 Resolve = function(Player)
     if not Menu.Rage.Resolver.on.value then        
-        plist.set(Player, "Correction active", true)
+        plist.set(Player, 'Correction active', true)
 
-        plist.set(Player, "Force body yaw", false)
-        plist.set(Player, "Force body yaw value", 0)
+        plist.set(Player, 'Force body yaw', false)
+        plist.set(Player, 'Force body yaw value', 0)
 
         return
     end
 
-    if Menu.Rage.Resolver.Mode.value == "Math.Random" then
-        plist.set(Player, "Correction active", false)
+    if Menu.Rage.Resolver.Mode.value == 'Math.Random' then
+        plist.set(Player, 'Correction active', false)
 
-        plist.set(Player, "Force body yaw", true)
-        plist.set(Player, "Force body yaw value", math.random(-60, 60))
-    elseif Menu.Rage.Resolver.Mode.value == "Soon" then
-        plist.set(Player, "Correction active", true)
+        plist.set(Player, 'Force body yaw', true)
+        plist.set(Player, 'Force body yaw value', math.random(-60, 60))
+    elseif Menu.Rage.Resolver.Mode.value == 'Soon' then
+        plist.set(Player, 'Correction active', true)
 
-        plist.set(Player, "Force body yaw", false)
-        plist.set(Player, "Force body yaw value", 0)
+        plist.set(Player, 'Force body yaw', false)
+        plist.set(Player, 'Force body yaw value', 0)
     end
 end
 
-client.set_event_callback("net_update_start", function()
+client.set_event_callback('net_update_start', function()
     local Enemies = entity.get_players(true)
     for i = 1, #Enemies do 
         local Player = Enemies[i]
@@ -2319,7 +2691,7 @@ client.set_event_callback("net_update_start", function()
 end)
 
 local RoundStarted = false
-client.set_event_callback("net_update_end", function()
+client.set_event_callback('net_update_end', function()
     if not Globals.UserData.LoggedIN then
         return
     end
@@ -2330,7 +2702,7 @@ client.set_event_callback("net_update_end", function()
     end
 end)
 
-client.set_event_callback("round_prestart", function(e)
+client.set_event_callback('round_prestart', function(e)
     if not Globals.UserData.LoggedIN then
         return
     end
@@ -2341,7 +2713,7 @@ client.set_event_callback("round_prestart", function(e)
 end)
 
 -- Periodic stats saver (every 30 seconds)
-client.set_event_callback("run_command", function()
+client.set_event_callback('run_command', function()
     if not Globals.UserData.LoggedIN then
         return
     end
@@ -2390,13 +2762,6 @@ client.set_event_callback('aim_fire', function(e)
 
     Logs[#Logs + 1] = e.id
 
-    local bt_ticks = 0
-    if e.record and e.record.simulation_time then
-        local current_time = globals.curtime()
-        local time_diff = current_time - e.record.simulation_time
-        bt_ticks = math.max(0, math.floor(time_diff / globals.tickinterval()))
-    end
-
     Shots[e.id] = {
         Id = e.id,
         Target = e.target,
@@ -2407,10 +2772,10 @@ client.set_event_callback('aim_fire', function(e)
         Miss = false,
         Damage = 0,
         HitGroup = 0,
-        Target = "",
+        Target = '',
         HitChance = 0,
         BT = 0,
-        Reason = "",
+        Reason = '',
         Alpha = 255
     }
 
@@ -2435,16 +2800,15 @@ client.set_event_callback('aim_hit', function(e)
     s.HitChance = e.hit_chance
     s.BT = globals.tickcount() - e.tick
     s.LC = e.teleported
-    s.Reason = ""
+    s.Reason = ''
 
     ::continue::
 
-    if table.find(Menu.Miscellaneous.Logs.LogsType.value, "Console") then
-        if table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Hit") then
-            -- FIX: Use e.hitgroup directly instead of s.HitGroup
-            local Hitgroup = HitgroupNames[s.HitGroup + 1] or "Unknown"
-            utils.printc(pui.format(string.format("\f<z>[\f<ez>Orion Solutions\f<z>] \f<z>Hit " .. "\f<ez>" .. entity.get_player_name(e.target) .. "\f<z> In The " .. "\f<ez>" .. Hitgroup .. "\f<z> For " .. "\f<ez>" .. s.Damage .. "\f<z> Damage" .. (s.BT ~= 0 and ' (\f<ez>'..s.BT..'\f<z> BT)' or '') .. "\f<z> HC: " .. string.format('%.0f', s.HitChance) .. (s.LC ~= 0 and ' ('..'\f<z>LC)' or ''))))
-        end
+    if table.find(Menu.Miscellaneous.Logs.LogsOption.value, 'Hit') then
+        local Hitgroup = HitgroupNames[s.HitGroup + 1] or 'Unknown'
+        -- Only show BT if it's more than 1 tick (indicating actual backtrack)
+        local btDisplay = (s.BT and s.BT > 1) and string.format(' (\f<green>%d\f<z> BT)', s.BT) or ''
+        utils.printc(pui.format(string.format('\f<z>[\f<green>Orion Solutions\f<z>] \f<z>Hit ' .. '\f<green>' .. entity.get_player_name(e.target) .. '\f<z> In The ' .. '\f<green>' .. Hitgroup .. '\f<z> For ' .. '\f<green>' .. s.Damage .. '\f<z> Damage' .. btDisplay .. (s.LC and ' ('..'\f<z>LC)' or ''))))
     end
 end)
 
@@ -2457,27 +2821,35 @@ client.set_event_callback('aim_miss', function(e)
     if not s then 
         goto continue
     end
-    s.Hit = true
-    s.Miss = false
+
+    s.Hit = false  -- This should be false for misses
+    s.Miss = true  -- This should be true for misses
     s.TimeMiss = globals.curtime()
-    s.Damage = e.damage
-    s.HitGroup = e.hitgroup
+    s.Damage = e.damage or 0  -- e.damage might be nil in miss events
+    s.HitGroup = e.hitgroup or 0
     s.Target = e.target
-    s.HitChance = e.hit_chance
+    s.HitChance = e.hit_chance or 0
     s.BT = globals.tickcount() - e.tick
-    s.Reason = ""
+    s.Reason = e.reason or 'unknown'  -- Miss events usually have a reason
 
     ::continue::
 
-    if table.find(Menu.Miscellaneous.Logs.LogsType.value, "Console") then
-        if table.find(Menu.Miscellaneous.Logs.LogsOption.value, "Miss") then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Miss")))
+    if s.Reason == '?' then
+        s.Reason = 'Resolver'
+    elseif s.Reason == 'spread' then
+        s.Reason = 'Spread'
+    end
+
+    if table.find(Menu.Miscellaneous.Logs.LogsType.value, 'Console') then
+        if table.find(Menu.Miscellaneous.Logs.LogsOption.value, 'Miss') then
+            local HitGroup = HitgroupNames[s.HitGroup + 1] or 'Unknown'
+            utils.printc(pui.format(string.format('\f<z>[\f<red>Orion Solutions\f<z>] \f<z>Missed ' .. '\f<red>' .. entity.get_player_name(s.Target) .. '\f<z> In The ' .. '\f<red>' .. HitGroup .. '\f<z> Due To ' .. '\f<red>' .. s.Reason)))
         end
     end
 end)
 
 -- Save on shutdown
-client.set_event_callback("shutdown", function()
+client.set_event_callback('shutdown', function()
     if Globals.UserData.LoggedIN and Globals.UserData.UserID then
         SaveStatsToFirebase()
 
@@ -2491,12 +2863,12 @@ client.set_event_callback("shutdown", function()
 end)
 
 client.delay_call(0, function()
-    local saved = database.read("orion_credentials")
+    local saved = database.read('orion_credentials')
     if saved then
         local ok, credentials = pcall(json.parse, saved)
         if ok and credentials and credentials.username and credentials.password then
             -- Check SteamID before auto-login
-            FireBase.read(PATHS.Users .. "/" .. credentials.username, function(success, user)
+            FireBase.read(PATHS.Users .. '/' .. credentials.username, function(success, user)
                 if success and user then
                     local current_steamid = panorama.open().MyPersonaAPI.GetXuid()
                     if not user.steamid or user.steamid == current_steamid then
@@ -2506,7 +2878,7 @@ client.delay_call(0, function()
                         Menu.Auth.RememberMe:set(true)
                         Login(credentials.username, credentials.password, true)
                     else
-                        utils.printc(pui.format(string.format("\f<r>[\f<ez>Auth\f<r>] \f<z>Auto-Login Failed: HWID Mismatch")))
+                        utils.printc(pui.format(string.format('\f<z>[\f<orion>Auth\f<z>] \f<z>Auto-Login Failed: HWID Mismatch')))
                     end
                 end
             end)
@@ -2515,8 +2887,8 @@ client.delay_call(0, function()
 end)
 
 SaveConfigToFirebase = function(name, encoded)
-    local username = Globals.UserData.Username or "Unknown"
-    local path = string.format("/configs/%s/%s", username, name)
+    local username = Globals.UserData.Username or 'Unknown'
+    local path = string.format('/configs/%s/%s', username, name)
     local data = {
         author = username,
         cfg = encoded,
@@ -2524,52 +2896,52 @@ SaveConfigToFirebase = function(name, encoded)
     }
     FireBase.write(path, data, function(success)
         if success then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Auth\f<r>] \f<z>Config: \f<ez>%s Uploaded To Cloud", name)))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Auth\f<z>] \f<z>Config: \f<orion>%s Uploaded To Cloud', name)))
         else
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Auth\f<r>] \f<z>Failed To Upload Config To Cloud")))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Auth\f<z>] \f<z>Failed To Upload Config To Cloud')))
         end
     end)
 end
 
 RefreshCloudConfigList = function()
     if not Globals.UserData.LoggedIN then 
-        utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Not logged in, cannot refresh cloud configs")))
+        utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Not logged in, cannot refresh cloud configs')))
         return 
     end
     
-    local username = Globals.UserData.Username or "Unknown"
-    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Refreshing cloud configs for user: \f<ez>%s", username)))
+    local username = Globals.UserData.Username or 'Unknown'
+    utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Refreshing cloud configs for user: \f<orion>%s', username)))
 
-    FireBase.read("/configs/" .. username, function(success, data)
+    FireBase.read('/configs/' .. username, function(success, data)
         if not success or not data or data == json.null then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud configs found for user: \f<ez>%s", username)))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No cloud configs found for user: \f<orion>%s', username)))
             
             -- Clear the cloud configs array
-            db.db.configs["Cloud"] = {}
+            db.db.configs['Cloud'] = {}
             
             -- Update UI with empty message
-            local displayList = {"No Cloud Configs"}
+            local displayList = {'No Cloud Configs'}
             Menu.Home.ConfigSystem.List:update(displayList)
             Menu.Home.ConfigSystem.List:set(0)
-            Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+            Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
             return
         end
 
-        db.db.configs["Cloud"] = {} -- Reset and ensure it's an array
+        db.db.configs['Cloud'] = {} -- Reset and ensure it's an array
         local displayList = {}
 
         for cfgName, cfgData in pairs(data) do
             if cfgData and cfgData.cfg then
                 -- Store as array element with name and config data
-                table.insert(db.db.configs["Cloud"], {cfgName, cfgData.cfg})
+                table.insert(db.db.configs['Cloud'], {cfgName, cfgData.cfg})
                 local author = cfgData.author or username
-                table.insert(displayList, string.format("[%s] ~ %s", author, cfgName))
+                table.insert(displayList, string.format('[%s] ~ %s', author, cfgName))
             end
         end
 
         -- Sort alphabetically by config name
-        table.sort(db.db.configs["Cloud"], function(a, b)
-            return (a[1] or "") < (b[1] or "")
+        table.sort(db.db.configs['Cloud'], function(a, b)
+            return (a[1] or '') < (b[1] or '')
         end)
 
         -- Update the listbox
@@ -2577,17 +2949,17 @@ RefreshCloudConfigList = function()
             Menu.Home.ConfigSystem.List:update(displayList)
             Menu.Home.ConfigSystem.List:set(0) -- Select first item
             
-            local firstConfig = db.db.configs["Cloud"][1]
+            local firstConfig = db.db.configs['Cloud'][1]
             if firstConfig then
-                Menu.Home.ConfigSystem.Selected:set("Selected - \v" .. (firstConfig[1] or "Unknown"))
+                Menu.Home.ConfigSystem.Selected:set('Selected - \v' .. (firstConfig[1] or 'Unknown'))
             end
 
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded cloud configs: \f<ez>%d", #displayList)))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loaded cloud configs: \f<orion>%d', #displayList)))
         else
-            Menu.Home.ConfigSystem.List:update({"No Cloud Configs"})
+            Menu.Home.ConfigSystem.List:update({'No Cloud Configs'})
             Menu.Home.ConfigSystem.List:set(0)
-            Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud configs available")))
+            Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No cloud configs available')))
         end
     end)
 end
@@ -2601,7 +2973,7 @@ local Config do
 
         local typeIndex = Menu.Home.ConfigSystem.Type:get()
         local typeList = Menu.Home.ConfigSystem.Type:get_list()
-        local cfgType = typeList[typeIndex] or "Local"
+        local cfgType = typeList[typeIndex] or 'Local'
 
         for i, cfgs in pairs(db.db.configs[cfgType] or {}) do
             table.insert(db.configs, pui.format('[\v' .. i .. '\r] ' .. cfgs[1]))
@@ -2612,36 +2984,36 @@ local Config do
 
     GetConfig = function()
         -- Get config type - it's already the string value
-        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or 'Local'
         local listIndex = Menu.Home.ConfigSystem.List.value + 1
 
-        if cfgType == "Cloud" then
+        if cfgType == 'Cloud' then
             -- Cloud config logic
-            local cloudConfigs = db.db.configs["Cloud"] or {}
+            local cloudConfigs = db.db.configs['Cloud'] or {}
         
             local t = cloudConfigs[listIndex]
         
             if not t then
-                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud config found at index: \f<ez>%d", #listIndex)))
+                utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No cloud config found at index: \f<orion>%d', #listIndex)))
                 return nil, nil
             end
         
-            local name = t[1] or "Unknown"
-            local cfg = t[2] or ""
+            local name = t[1] or 'Unknown'
+            local cfg = t[2] or ''
             return name, cfg
         else
             -- Local config logic
-            local localConfigs = db.db.configs["Local"] or {}
+            local localConfigs = db.db.configs['Local'] or {}
         
             local t = localConfigs[listIndex]
         
             if not t then
-                 utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No local config found at index: \f<ez>%d", #listIndex)))
+                 utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No local config found at index: \f<orion>%d', #listIndex)))
                 return nil, nil
             end
         
-            local name = t[1] or "Unknown"
-            local cfg = t[2] or ""
+            local name = t[1] or 'Unknown'
+            local cfg = t[2] or ''
             return name, cfg
         end
     end
@@ -2659,34 +3031,34 @@ local Config do
 
     Menu.Home.ConfigSystem.Delete:set_callback(function()
         local val = Menu.Home.ConfigSystem.List:get()
-        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or 'Local'
 
-        if cfgType == "Cloud" then
-            local cloudConfigs = db.db.configs["Cloud"] or {}
+        if cfgType == 'Cloud' then
+            local cloudConfigs = db.db.configs['Cloud'] or {}
             local configToDelete = cloudConfigs[val + 1]
     
             if not configToDelete then
-                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud config selected to delete!")))
+                utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No cloud config selected to delete!')))
                 return
             end
     
-            local configName = configToDelete[1] or "Unknown"
-            local username = Globals.UserData.Username or "Unknown"
+            local configName = configToDelete[1] or 'Unknown'
+            local username = Globals.UserData.Username or 'Unknown'
     
-            local path = string.format("/configs/%s/%s", username, configName)
+            local path = string.format('/configs/%s/%s', username, configName)
             FireBase.delete(path, function(success, response)
                 if success then
-                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Deleted cloud config: \f<ez>%s", configName)))
+                    utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Deleted cloud config: \f<orion>%s', configName)))
                     RefreshCloudConfigList()
                 else
-                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Failed to delete cloud config: \f<ez>%s", configName)))
+                    utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Failed to delete cloud config: \f<orion>%s', configName)))
                 end
             end)
         else
-            local configName = db.db.configs['Local'][val + 1] and db.db.configs['Local'][val + 1][1] or ""
+            local configName = db.db.configs['Local'][val + 1] and db.db.configs['Local'][val + 1][1] or ''
     
-            if configName == "Default" then
-                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Cannot Delete Default config!")))
+            if configName == 'Default' then
+                utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Cannot Delete Default config!')))
                 return
             end
     
@@ -2698,28 +3070,25 @@ local Config do
     end)
 
     Menu.Home.ConfigSystem.Save:set_callback(function()
-        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or 'Local'
         local cfg = base64.encode(json.stringify(Config:save()))
         local listIndex = Menu.Home.ConfigSystem.List.value + 1
 
-        if cfgType == "Cloud" then
-            -- Handle cloud config saving
-            local cloudConfigs = db.db.configs["Cloud"] or {}
+        if cfgType == 'Cloud' then
+            local cloudConfigs = db.db.configs['Cloud'] or {}
             local configToUpdate = cloudConfigs[listIndex]
         
             if not configToUpdate then
-                utils.printc(pui.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No cloud config selected to save!"))
+                utils.printc(pui.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No cloud config selected to save!'))
                 return
             end
         
-            local configName = configToUpdate[1] or "Unknown"
-            local username = Globals.UserData.Username or "Unknown"
-        
-            -- Update the local cache first
-            db.db.configs["Cloud"][listIndex][2] = cfg
-        
-            -- Then update Firebase
-            local path = string.format("/configs/%s/%s", username, configName)
+            local configName = configToUpdate[1] or 'Unknown'
+            local username = Globals.UserData.Username or 'Unknown'
+
+            db.db.configs['Cloud'][listIndex][2] = cfg
+
+            local path = string.format('/configs/%s/%s', username, configName)
             local data = {
                 author = username,
                 cfg = cfg,
@@ -2728,21 +3097,18 @@ local Config do
         
             FireBase.write(path, data, function(success, response)
                 if success then
-                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config '\f<ez>%s\f<z>' saved to cloud", configName)))
+                    utils.printc(pui.format(string.format("\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Config '\f<orion>%s\f<z>' saved to cloud", configName)))
                 else
-                    utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Failed to save config '\f<ez>%s\f<z>' to cloud", configName)))
-                    -- Revert local cache on failure
-                    db.db.configs["Cloud"][listIndex][2] = configToUpdate[2]
+                    db.db.configs['Cloud'][listIndex][2] = configToUpdate[2]
                 end
             end)
         else
-            -- Handle local config saving (existing code)
             if db.db.configs['Local'] and db.db.configs['Local'][listIndex] then
                 db.db.configs['Local'][listIndex][2] = cfg
                 db.save()
-                utils.printc(pui.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config saved locally"))
+                utils.printc(pui.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Config saved locally'))
             else
-                utils.printc(pui.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config not found for saving"))
+                utils.printc(pui.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Config not found for saving'))
             end
         end
     end)
@@ -2754,101 +3120,88 @@ local Config do
     end)
 
     Load = function(self)
-        -- Get the ACTUAL config type
-        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or 'Local'
 
         local name, config = GetConfig()
         if not name or not config then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No config selected to load!")))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No config selected to load!')))
             return
         end
 
-        utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loading \f<ez> %s \f<z>Config: \f<ez>%s", cfgType, name)))
+        utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loading \f<orion> %s \f<z>Config: \f<orion>%s', cfgType, name)))
 
-        -- Determine if this is Load AA or regular Load
-        local isLoadAA = (self == Menu.Home.ConfigSystem.LoadAA)
-    
-        -- Try to decode and load
         local success, decrypted = pcall(json.parse, base64.decode(config))
         if success and decrypted then
-            if isLoadAA then
-                Config:load(decrypted, "AntiAim")
-                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded Anti-Aim only")))
-            else
-                Config:load(decrypted)
-                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded full config")))
-            end
+            Config:load(decrypted)
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loaded Config')))
         
-            if cfgType == "Local" then
+            if cfgType == 'Local' then
                 db.save()
             end
         else
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<r>Failed to parse config data!")))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Failed to parse config data!')))
         end
     end
 
     Menu.Home.ConfigSystem.Import:set_callback(function()
         local text = clipboard.get()
-        local name, config = text:match("OrionConfigs::([%s%S]+)::([%s%S]+)")
+        local name, config = text:match('OrionConfigs::([%s%S]+)::([%s%S]+)')
         if not name or not config then return end
         Create(name,config)
         Load(Menu.Home.ConfigSystem.Load)
     end)
 
     Menu.Home.ConfigSystem.Load:set_callback(Load)
-    Menu.Home.ConfigSystem.LoadAA:set_callback(Load)
     Menu.Home.ConfigSystem.Create:set_callback(Create)
 
     Menu.Home.ConfigSystem.List:set_callback(function(self)
-        local cfgType = Menu.Home.ConfigSystem.Type:get() or "Local"
+        local cfgType = Menu.Home.ConfigSystem.Type:get() or 'Local'
     
-        if cfgType == "Cloud" then
-            local cloudConfigs = db.db.configs["Cloud"] or {}
+        if cfgType == 'Cloud' then
+            local cloudConfigs = db.db.configs['Cloud'] or {}
             local selectedConfig = cloudConfigs[self.value + 1]
             if selectedConfig then
-                local name = selectedConfig[1] or "Unknown"
-                Menu.Home.ConfigSystem.Selected:set("Selected - \v" .. name)
+                local name = selectedConfig[1] or 'Unknown'
+                Menu.Home.ConfigSystem.Selected:set('Selected - \v' .. name)
             else
-                Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+                Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
             end
         else
-            local localConfigs = db.db.configs["Local"] or {}
+            local localConfigs = db.db.configs['Local'] or {}
             local selectedConfig = localConfigs[self.value + 1]
             if selectedConfig then
-                local name = selectedConfig[1] or "Unknown"
-                Menu.Home.ConfigSystem.Selected:set("Selected - \v" .. name)
+                local name = selectedConfig[1] or 'Unknown'
+                Menu.Home.ConfigSystem.Selected:set('Selected - \v' .. name)
             else
-                Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+                Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
             end
         end
     end, true)
 
-    -- Upload to Cloud Button Callback (using GetConfig)
     Menu.Home.ConfigSystem.Upload:set_callback(function()
         if not Globals.UserData.LoggedIN then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>You must be logged in to upload configs!")))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>You must be logged in to upload configs!')))
             return
         end
 
         local name, cfg = GetConfig()
-        if not name or name == "" then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>No config selected to upload!")))
-            return
-        end
-    
-        -- Prevent uploading Default config
-        if name == "Default" then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Cannot upload Default config!")))
-            return
-        end
-    
-        if not cfg or cfg == "" then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Config data missing for: \f<ez>%s", name)))
+        if not name or name == '' then
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No config selected to upload!')))
             return
         end
 
-        local username = Globals.UserData.Username or "Unknown"
-        local path = string.format("/configs/%s/%s", username, name)
+        if name == 'Default' then
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Cannot Upload \f<orion>Default \f<z>Config!')))
+            return
+        end
+    
+        if not cfg or cfg == '' then
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Config data missing for: \f<orion>%s', name)))
+            return
+        end
+
+        local username = Globals.UserData.Username or 'Unknown'
+        local path = string.format('/configs/%s/%s', username, name)
 
         local data = {
             author = username,
@@ -2858,39 +3211,39 @@ local Config do
 
         FireBase.write(path, data, function(success, response)
             if success then
-                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Successfully uploaded config: \f<ez>%s", name)))
+                utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Successfully uploaded config: \f<orion>%s', name)))
             else
-                utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Failed to upload config: \f<ez>%s' — %s", name, tostring(response))))
+                utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Failed to upload config: \f<orion>%s — %s', name, tostring(response))))
             end
         end)
     end)
 
     Menu.Home.ConfigSystem.Type:set_callback(function(this)
         local currentValue = this.value
-        local cfgType = currentValue or "Local"  -- Since value is already the string
+        local cfgType = currentValue or 'Local'  -- Since value is already the string
 
-        if cfgType == "Cloud" then
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Switching to Cloud configs...")))
+        if cfgType == 'Cloud' then
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Switching to Cloud configs...')))
             RefreshCloudConfigList()
         else
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Switching to Local configs...")))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Switching to Local configs...')))
             local localList = {}
 
             -- Format: [index] ConfigName
-            for i = 1, #db.db.configs["Local"] do
-                local cfg = db.db.configs["Local"][i]
-                local cfgName = type(cfg) == "table" and (cfg[1] or "Unnamed") or tostring(cfg)
-                table.insert(localList, string.format("[%d] %s", i, cfgName))
+            for i = 1, #db.db.configs['Local'] do
+                local cfg = db.db.configs['Local'][i]
+                local cfgName = type(cfg) == 'table' and (cfg[1] or 'Unnamed') or tostring(cfg)
+                table.insert(localList, string.format('[%d] %s', i, cfgName))
             end
 
             -- Update the List UI for Local mode
             Menu.Home.ConfigSystem.List:update(localList)
 
-            utils.printc(pui.format(string.format("\f<r>[\f<ez>Orion Solutions\f<r>] \f<z>Loaded \f<ez>%d \f<z>Local Configs:", #localList)))
+            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loaded \f<orion>%d \f<z>Local Configs:', #localList)))
         end
 
        -- Reset selection text
-        Menu.Home.ConfigSystem.Selected:set("Selected - \vNone")
+        Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
     end)
 end
 
@@ -2898,13 +3251,9 @@ end
 --client.delay_call(1, function()
 --    FireBase.update(PATHS.Users, json.null, function(success, error)
 --        if success then
---            client.log("[Orion] Removed Invites path from database on launch")
+--            client.log('[Orion] Removed Invites path from database on launch')
 --        else
---            client.log("[Orion] Failed to remove Invites path: " .. (error or "unknown"))
+--            client.log('[Orion] Failed to remove Invites path: ' .. (error or 'unknown'))
 --        end
 --    end)
 --end)
-
-do 
-    drag.on_config_load()
-end
