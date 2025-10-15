@@ -186,7 +186,7 @@ local Globals = {
         Version = 'Live',
         LastUpdateTime = 0,
         LoginTime = nil,
-        Stats = {  -- Add stats section
+        Stats = {
             KillCount = 0,
             Coins = 0,
             TimesLoaded = 0
@@ -717,35 +717,29 @@ local AA = {
             [1] = {},
         },
     },
-    
-    -- Enhanced conditions system
+
     Conditions = {
-        -- Toggle conditions on/off
         Dormant = false,
         SafeHead = false,
-        
-        -- Safe Head weapon filters
+
         SafeHeadWeapons = {
             Knife = false,
             Zeus = false, 
             HeightAdvantage = false
         },
-        
-        -- Manual AA states
+
         ManualAA = {
             Active = false,
             Direction = nil, -- 'forward', 'left', 'right'
             LastDirection = nil
         },
-        
-        -- Exploit states
+
         Exploit = {
             DoubleTap = false,
             HideShots = false,
             FakeDuck = false
         },
-        
-        -- Defensive AA
+
         Defensive = {
             Enabled = false,
             Force = false,
@@ -754,8 +748,7 @@ local AA = {
             MaxTicks = 13
         }
     },
-    
-    -- Helper functions for condition detection
+
     Functions = {
         HeightAdvantage = function(localPlayer)
             if not localPlayer then return false end
@@ -896,7 +889,6 @@ local Menu = {
             },
 
             Defensive = {
-                -- Defensive AA Settings
                 GUI.Header('Defensive AA', Groups.Angles),
                 DefensiveEnabled = Groups.Angles:checkbox('Defensive AA'),
                 DefensiveForce = Groups.Angles:checkbox('Force Defensive'),
@@ -1097,19 +1089,16 @@ local Render = {
 	end
 }
 
--- State variables (place with your other vars)
 local aspect_ratio_active = false
 local aspect_ratio_value = 0
 local aspect_ratio_default = 0
 
--- Calculate default aspect ratio
 local function calculate_default_aspect()
     local screen_width, screen_height = client.screen_size()
     aspect_ratio_default = screen_width / screen_height
     aspect_ratio_value = aspect_ratio_default
 end
 
--- Handle aspect ratio changes
 local function update_aspect_ratio()
     if not aspect_ratio_active then return end
     
@@ -1130,12 +1119,10 @@ local function update_aspect_ratio()
     end
 end
 
--- Activate aspect ratio updates
 local function activate_aspect_ratio()
     aspect_ratio_active = true
 end
 
--- Initialize aspect ratio system
 local function setup_aspect_ratio()
     calculate_default_aspect()
     
@@ -1147,8 +1134,7 @@ local function setup_aspect_ratio()
     end, true)
     
     Menu.Visuals.AspectRatio.Ratio:set_callback(activate_aspect_ratio, true)
-    
-    -- Reset on startup
+
     client.delay_call(0, function()
         client.set_cvar('r_aspectratio', 0)
     end)
@@ -1206,10 +1192,8 @@ Glow = function(x, y, w, h, glow_intensity, bg_r, bg_g, bg_b, bg_a, glow_r, glow
     end
 end
 
--- Firebase Storage Configuration
 local FIREBASE_LOGO_URL = 'https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/logo.png?alt=media&token=67b51834-a77d-423c-8502-bea77a714cec'
 
--- Global logo variables
 local logo = nil
 local logo_texture = nil
 local logo_loaded = false
@@ -1219,10 +1203,8 @@ local UserPfpCache = {}
 local function downloadFirebaseStorageFile(storagePathOrUrl, callback)
     local url
     if storagePathOrUrl:find('^https://') then
-        -- full URL (logo, special cases)
         url = storagePathOrUrl
     else
-        -- Firebase Storage path (pfps, etc.)
         url = 'https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/'
             .. storagePathOrUrl .. '?alt=media'
     end
@@ -1236,9 +1218,7 @@ local function downloadFirebaseStorageFile(storagePathOrUrl, callback)
     end)
 end
 
--- Load logo with caching and fallbacks
 local function loadLogo()
-    -- 1. Try local cache first
     pcall(function()
         logo = readfile('orion_logo.png')
         if logo then
@@ -1247,14 +1227,12 @@ local function loadLogo()
         end
     end)
 
-    -- 2. If no cache, download from Firebase Storage
     if not logo then
         downloadFirebaseStorageFile(FIREBASE_LOGO_URL, function(success, data)
             if success then
                 logo = data
                 logo_loaded = true
 
-                -- save to cache
                 pcall(function()
                     writefile('orion_logo.png', data)
                 end)
@@ -1325,8 +1303,8 @@ local LocalPlayer = {
     State = 0,
     LastState = 0,
     ManualYaw = nil, 
-    Flicking = false, -- For defensive flick
-    Exploit = '', -- Current exploit state
+    Flicking = false,
+    Exploit = '',
     OnGround = false,
     Moving = false,
     Crouching = false
@@ -1348,11 +1326,9 @@ LocalPlayerState = function(cmd)
         LocalPlayer.InScore = cmd.in_score == 1
         LocalPlayer.Scoped = entity.get_prop(LocalPlayer.Entity, 'm_bIsScoped') == 1
         LocalPlayer.Weapon = entity.get_player_weapon(LocalPlayer.Entity)
-        
-        -- Reset state to base condition first
+
         LocalPlayer.State = 1 -- Default to Standing
-        
-        -- Base condition detection
+
         if LocalPlayer.OnGround then
             if LocalPlayer.Crouching then
                 if LocalPlayer.Moving then
@@ -1379,11 +1355,9 @@ LocalPlayerState = function(cmd)
                 LocalPlayer.State = 3 -- In Air / Jumping
             end
         end
-        
-        -- Store the base state before applying special conditions
+
         local baseState = LocalPlayer.State
-        
-        -- Apply special conditions (these override base states)
+
         if LocalPlayer.ManualYaw then 
             LocalPlayer.State = 10 -- Manual yaw
         elseif AA.Conditions.Dormant and #entity.get_players(true) == 0 then
@@ -1391,8 +1365,7 @@ LocalPlayerState = function(cmd)
         elseif References.AntiAim.FakeLag.Enable:get() and not (References.Rage.Aimbot.DoubleTap[1]:get() and References.Rage.Aimbot.DoubleTap[2]:get()) then
             LocalPlayer.State = 9 -- Fake Lag
         end
-        
-        -- Safe Head condition
+
         if AA.Conditions.SafeHead then
             local csgoweapon = csgo_weapons(LocalPlayer.Weapon)
             if csgoweapon then
@@ -1400,16 +1373,15 @@ LocalPlayerState = function(cmd)
                 if (csgoweapon.is_knife and AA.Conditions.SafeHeadWeapons.Knife) or
                    (csgoweapon.is_taser and AA.Conditions.SafeHeadWeapons.Zeus) or
                    (AA.Conditions.SafeHeadWeapons.HeightAdvantage and height_advantage) then
-                    LocalPlayer.State = 11 -- Safe Head
+                    LocalPlayer.State = 11
                 end
             end
         end
-        
-        -- Track flicking state for defensive AA
+
         LocalPlayer.Flicking = AA.ConditionSystem.Defensive.Enabled and (
             AA.ConditionSystem.Defensive.Force or 
             AA.ConditionSystem.Defensive.RemainingTicks > 0 or
-            globals.tickcount() % 128 < 10 -- Example: flick every ~2 seconds
+            globals.tickcount() % 128 < 10
         )
     end
 end
@@ -1421,23 +1393,21 @@ AntiAim = function(cmd)
     if stateData and LocalPlayer.State ~= LocalPlayer.LastState then
         LocalPlayer.LastState = LocalPlayer.State
     end
-    
-    -- Map LocalPlayer.State to ConditionList properly
+
     local stateToConditionMap = {
-        [1] = "Standing",      -- Standing
-        [2] = "Running",       -- Running
-        [3] = "Jumping",       -- In Air
-        [4] = "Crouching",     -- Crouching
-        [5] = "Crouch Moving", -- Crouch Moving
-        [6] = "Slowwalking",   -- Slow Walking
-        [7] = "Air Crouching", -- Air Crouching
-        [9] = "Fake Lagging",  -- Fake Lag
-        [10] = "Manual Yaw",   -- Manual Yaw
-        [11] = "Safe Head",    -- Safe Head
-        [12] = "Dormant"       -- Dormant
+        [1] = "Standing",      
+        [2] = "Running",      
+        [3] = "Jumping",       
+        [4] = "Crouching",     
+        [5] = "Crouch Moving", 
+        [6] = "Slowwalking",   
+        [7] = "Air Crouching", 
+        [9] = "Fake Lagging",  
+        [10] = "Manual Yaw",   
+        [11] = "Safe Head",    
+        [12] = "Dormant"
     }
-    
-    -- Get current condition name
+
     local currentCondition = stateToConditionMap[LocalPlayer.State] or "Standing"
     local pitchSetting = AA.ConditionSystem.Pitch[currentCondition] or "Off"
     local yawOffset = AA.ConditionSystem.YawOffset[currentCondition] or 0
@@ -1449,30 +1419,22 @@ AntiAim = function(cmd)
     local edgeYaw = AA.ConditionSystem.EdgeYaw[currentCondition] or false
     local freestanding = AA.ConditionSystem.Freestanding[currentCondition] or false
     local rollValue = AA.ConditionSystem.Roll[currentCondition] or 0
-    
-    -- Defensive AA Logic (Continuous when enabled)
+
     local isDefensiveActive = false
     
     if AA.ConditionSystem.Defensive.Enabled then
-        -- Check if defensive should be active
         if AA.ConditionSystem.Defensive.Force then
-            -- Force defensive always on
             isDefensiveActive = true
             cmd.force_defensive = true
         elseif LocalPlayer.Flicking then
-            -- Defensive when flicking
             isDefensiveActive = true
         elseif AA.ConditionSystem.Defensive.RemainingTicks > 0 then
-            -- Defensive for remaining ticks (from events)
             isDefensiveActive = true
             AA.ConditionSystem.Defensive.RemainingTicks = AA.ConditionSystem.Defensive.RemainingTicks - 1
         end
     end
     
     if isDefensiveActive then
-        -- Apply defensive AA overrides
-        
-        -- Apply defensive disablers
         if table.find(AA.ConditionSystem.Defensive.Disablers, "Body Yaw") then
             bodyYawMode = "Off"
             bodyYawOffset = 0
@@ -1481,8 +1443,7 @@ AntiAim = function(cmd)
         if table.find(AA.ConditionSystem.Defensive.Disablers, "Yaw Jitter") then
             yawJitterSetting = "Off"
         end
-        
-        -- Apply defensive pitch
+
         if AA.ConditionSystem.Defensive.Pitch ~= "None" then
             if AA.ConditionSystem.Defensive.Pitch == "Random" then
                 pitchSetting = "Custom"
@@ -1496,8 +1457,7 @@ AntiAim = function(cmd)
                 References.AntiAim.Angles.Pitch[2]:set(AA.ConditionSystem.Defensive.PitchValue)
             end
         end
-        
-        -- Apply defensive yaw
+
         if AA.ConditionSystem.Defensive.Yaw ~= "None" then
             if AA.ConditionSystem.Defensive.Yaw == "Sideways" then
                 yawSetting = "180"
@@ -1507,19 +1467,18 @@ AntiAim = function(cmd)
                 yawOffset = client.random_int(-180, 180)
             elseif AA.ConditionSystem.Defensive.Yaw == "Opposite" then
                 yawSetting = "180"
-                -- Invert current yaw
-                yawOffset = utils.normalize_yaw(yawOffset + 180)
+                yawOffset = globals.tickcount() % 2 == 0 and 180 or -180
+                --local currentYaw = entity.get_prop(entity.get_local_player(), 'm_angEyeAngles[1]') or 0
+                --yawOffset = utils.normalize_yaw(currentYaw + 180)
             elseif AA.ConditionSystem.Defensive.Yaw == "Custom" then
                 yawSetting = "180"
                 yawOffset = AA.ConditionSystem.Defensive.YawValue
             end
         end
     else
-        -- Reset defensive ticks when not active
         AA.ConditionSystem.Defensive.RemainingTicks = 0
     end
-    
-    -- Apply all AA settings (defensive may have overridden some)
+
     References.AntiAim.Angles.Pitch[1]:set(pitchSetting)
     References.AntiAim.Angles.Yaw[1]:set(yawSetting)
     References.AntiAim.Angles.YawJitter[1]:set(yawJitterSetting)
@@ -1530,8 +1489,7 @@ AntiAim = function(cmd)
     References.AntiAim.Angles.Freestanding:set(freestanding)
     References.AntiAim.Angles.Roll:set(rollValue)
     References.AntiAim.Angles.Yaw[2]:override(yawOffset)
-    
-    -- Apply GLOBAL Yaw Base
+
     local yawBaseSetting = Menu.AntiAim.ConditionSettings.Builder.YawBase:get()
     References.AntiAim.Angles.YawBase:set(yawBaseSetting)
 end
@@ -1544,15 +1502,13 @@ end
 
 client.set_event_callback('player_hurt', function(e)
     if client.userid_to_entindex(e.userid) == entity.get_local_player() then
-        -- Optional: Extend defensive when hurt
         TriggerDefensiveAA(AA.ConditionSystem.Defensive.MaxTicks)
     end
 end)
 
 client.set_event_callback('weapon_fire', function(e)
     if client.userid_to_entindex(e.userid) == entity.get_local_player() then
-        -- Optional: Brief defensive on shot
-        TriggerDefensiveAA(5) -- 5 ticks on shot
+        TriggerDefensiveAA(5)
     end
 end)
 
@@ -1629,14 +1585,12 @@ WaterMark = function()
     local TextWidth, TextHeight = renderer.measure_text(nil, fullText)
     local Left = Globals.ScreenX - TextWidth - 25
 
-    -- background + glow
     Glow(Left - 33, 9, TextWidth + 12 + 17, 22, 2, 23, 23, 23, 255, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a, true)
     RoundedRect(Left - 32, 10, TextWidth + 10 + 17, 20, 23, 23, 23, 255, 5)
 
     Render.Rectangle(Left - 33, 9, TextWidth + 12 + 17, 22, 5, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a)
     Render.Rectangle(Left - 32, 10, TextWidth + 10 + 17, 20, 5, 23, 23, 23, 255)
 
-    -- draw watermark text
     local currentX = Left - 10
     renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, 'Orion Solutions •')
     currentX = currentX + renderer.measure_text(nil, 'Orion Solutions •')
@@ -1656,18 +1610,15 @@ WaterMark = function()
 
     renderer.text(currentX, 10 + TextHeight/4, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a, nil, 200, versionText)
 
-    -- draw profile picture
     local SteamID3 = panorama.open().MyPersonaAPI.GetXuid()
     getUserProfileImage(Globals.UserData.Username, SteamID3, function(tex)
         if not tex then
-            -- fallback: steam avatar (square)
             local fallback = images.get_steam_avatar(SteamID3)
             fallback:draw(Left - 28, 13, 15, 15)
             renderer.circle_outline(Left - 20, 20, 23, 23, 23, 255, 10, 0, 1, 3)
             return
         end
-
-        -- circular PFP render
+        
         renderer.texture(tex, Left - 28, 13, 15, 15, 255, 255, 255, 255, 'f')
         renderer.circle_outline(Left - 20, 20, 23, 23, 23, 255, 10, 0, 1, 3)
     end)
@@ -1680,7 +1631,7 @@ local CasinoLogs = CasinoLogs or {}
 local HitgroupNames = {'Generic', 'Head', 'Chest', 'Stomach', 'Left Arm', 'right Arm', 'Left Leg', 'Right Leg', 'Neck', '?', 'Gear'}
 
 DrawLog = function(text, x, y, r, g, b, a, text2)
-     -- measure main text (right body)
+    -- measure main text (right body)
     local width, height = renderer.measure_text('b', text)
     height = math.max(20, height + 6) -- keep min height = 20
 
@@ -3312,7 +3263,7 @@ local Config do
 
     Menu.Home.ConfigSystem.Type:set_callback(function(this)
         local currentValue = this.value
-        local cfgType = currentValue or 'Local'  -- Since value is already the string
+        local cfgType = currentValue or 'Local'
 
         if cfgType == 'Cloud' then
             utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Switching to Cloud configs...')))
@@ -3321,20 +3272,17 @@ local Config do
             utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Switching to Local configs...')))
             local localList = {}
 
-            -- Format: [index] ConfigName
             for i = 1, #db.db.configs['Local'] do
                 local cfg = db.db.configs['Local'][i]
                 local cfgName = type(cfg) == 'table' and (cfg[1] or 'Unnamed') or tostring(cfg)
                 table.insert(localList, string.format('[%d] %s', i, cfgName))
             end
 
-            -- Update the List UI for Local mode
             Menu.Home.ConfigSystem.List:update(localList)
 
             utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loaded \f<orion>%d \f<z>Local Configs:', #localList)))
         end
 
-       -- Reset selection text
         Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
     end)
 end
