@@ -1419,6 +1419,7 @@ AntiAim = function(cmd)
     local edgeYaw = AA.ConditionSystem.EdgeYaw[currentCondition] or false
     local freestanding = AA.ConditionSystem.Freestanding[currentCondition] or false
     local rollValue = AA.ConditionSystem.Roll[currentCondition] or 0
+    local yawJitterOffset = AA.ConditionSystem.YawJitterOffset[currentCondition] or 0
 
     local isDefensiveActive = false
     
@@ -1479,16 +1480,67 @@ AntiAim = function(cmd)
         AA.ConditionSystem.Defensive.RemainingTicks = 0
     end
 
-    References.AntiAim.Angles.Pitch[1]:set(pitchSetting)
-    References.AntiAim.Angles.Yaw[1]:set(yawSetting)
-    References.AntiAim.Angles.YawJitter[1]:set(yawJitterSetting)
+    if pitchSetting == "Up" then
+        cmd.pitch = -89
+    elseif pitchSetting == "Down" then
+        cmd.pitch = 89
+    elseif pitchSetting == "Zero" then
+        cmd.pitch = 0
+    elseif pitchSetting == "Default" then
+        cmd.pitch = 0
+    elseif pitchSetting == "Custom" then
+        cmd.pitch = References.AntiAim.Angles.Pitch[2]:get()
+    elseif pitchSetting == "Off" then
+
+    end
+
+    if yawSetting == "Off" then
+
+    elseif yawSetting == "180" then
+        cmd.yaw = cmd.yaw + 180
+    elseif yawSetting == "Spin" then
+        cmd.yaw = (globals.tickcount() * 5) % 360
+    elseif yawSetting == "Static" then
+        cmd.yaw = cmd.yaw + yawOffset
+    elseif yawSetting == "180 Z" then
+        if globals.tickcount() % 2 == 0 then
+            cmd.yaw = cmd.yaw + 180
+        else
+            cmd.yaw = cmd.yaw
+        end
+    elseif yawSetting == "Crosshair" then
+        local viewYaw = client.camera_angles()
+        cmd.yaw = viewYaw
+    end
+
+    if yawJitterSetting == "Off" then
+    elseif yawJitterSetting == "Offset" then
+        if globals.tickcount() % 2 == 0 then
+            cmd.yaw = cmd.yaw + yawJitterOffset
+        else
+            cmd.yaw = cmd.yaw - yawJitterOffset
+        end
+    elseif yawJitterSetting == "Center" then
+        local jitter = math.sin(globals.curtime() * 10) * yawJitterOffset
+        cmd.yaw = cmd.yaw + jitter
+    elseif yawJitterSetting == "Random" then
+        cmd.yaw = cmd.yaw + client.random_int(-yawJitterOffset, yawJitterOffset)
+    elseif yawJitterSetting == "Skitter" then
+        local direction = (globals.tickcount() % 4 < 2) and 1 or -1
+        local jitterAmount = client.random_int(math.floor(yawJitterOffset / 2), yawJitterOffset)
+        cmd.yaw = cmd.yaw + (direction * jitterAmount)
+    end
+
+    --References.AntiAim.Angles.Pitch[1]:set(pitchSetting)
+    --References.AntiAim.Angles.Yaw[1]:set(yawSetting)
+    --References.AntiAim.Angles.YawJitter[1]:set(yawJitterSetting)
     References.AntiAim.Angles.BodyYaw[1]:set(bodyYawMode)
     References.AntiAim.Angles.BodyYaw[2]:set(bodyYawOffset)
     References.AntiAim.Angles.FreestandingBodyYaw:set(freestandingBodyYaw)
     References.AntiAim.Angles.EdgeYaw:set(edgeYaw)
     References.AntiAim.Angles.Freestanding:set(freestanding)
     References.AntiAim.Angles.Roll:set(rollValue)
-    References.AntiAim.Angles.Yaw[2]:override(yawOffset)
+    --References.AntiAim.Angles.Yaw[2]:override(yawOffset)
 
     local yawBaseSetting = Menu.AntiAim.ConditionSettings.Builder.YawBase:get()
     References.AntiAim.Angles.YawBase:set(yawBaseSetting)
