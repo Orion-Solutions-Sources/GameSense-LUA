@@ -94,6 +94,37 @@ local FireBase = {
     end
 }
 
+GetHWID = function()
+    local material_adapter_info_t = ffi.typeof([[struct {
+        char driver_name[512];
+        uint32_t vendor_id;
+        uint32_t device_id;
+        uint32_t sub_sys_id;
+        uint32_t revision;
+        int dx_support_level;
+        int min_dx_support_level;
+        int max_dx_support_level;
+        uint32_t driver_version_high;
+        uint32_t driver_version_low;
+    }]])
+
+    local native_GetCurrentAdapter = vtable_bind("materialsystem.dll", "VMaterialSystem080", 25, "int(__thiscall*)(void*)")
+    local native_GetAdapterInfo = vtable_bind("materialsystem.dll", "VMaterialSystem080", 26, "void(__thiscall*)(void*, int, void*)")
+
+    local adapter_info = material_adapter_info_t()
+    native_GetAdapterInfo(native_GetCurrentAdapter(), adapter_info)
+
+    local gpu = tostring(adapter_info.vendor_id) ..
+                tostring(adapter_info.sub_sys_id) ..
+                tostring(adapter_info.device_id)
+
+    if gpu == "0" or #ffi.string(adapter_info.driver_name) < 3 then
+        return nil
+    end
+
+    return gpu
+end
+
 local Time = {
     UnixTime = function()
         return client.unix_time()
@@ -115,6 +146,7 @@ local References = {
 			Damage = pui.reference('RAGE', 'Aimbot', 'Minimum damage'),
 			DamageOverride = { pui.reference('RAGE', 'Aimbot', 'Minimum damage override') },
 			DoubleTap = { pui.reference('RAGE', 'Aimbot', 'Double tap') },
+            DT = pui.reference('RAGE', 'Aimbot', 'Double tap'),
 			DoubleTapFakeLagLimit = { pui.reference('RAGE', 'Aimbot', 'Double tap fake lag limit') },
 		},
 		Other = {
@@ -182,11 +214,12 @@ local Globals = {
         LoggedIN = false,
         Username = nil,
         UserID = nil,
+        HWID = nil,
         IsAdmin = false,
         Version = 'Live',
         LastUpdateTime = 0,
         LoginTime = nil,
-        Stats = {
+        Stats = {  -- Add stats section
             KillCount = 0,
             Coins = 0,
             TimesLoaded = 0
@@ -529,7 +562,8 @@ local ConditionList = {
     'Crouching',     -- State 4
     'Crouch Moving', -- State 5
     'Jumping',       -- State 3
-    'Air Crouching', -- State 7 (new)
+    'Air Crouching', -- State 7 (NEW)
+    'Fake Ducking',  -- State 8 (NEW)
     'Fake Lagging',  -- State 9
     'Manual Yaw',    -- State 10
     'Safe Head',     -- State 11
@@ -543,247 +577,51 @@ local AntiAimTypes = {
 
 local AA = {
     States = {
-        [1] = {'stand', 'Standing', 'S'},
-        [2] = {'run', 'Running', 'R'},
-        [3] = {'air', 'In Air', 'A'},
-        [4] = {'crouch', 'Crouching', 'C'},
-        [5] = {'crouch_move', 'Crouch Moving', 'CM'},
-        [6] = {'walk', 'Slow Walking', 'SW'},
-        [7] = {'air_crouch', 'Air Crouching', 'AC'},  -- New
-        [9] = {'fakelag', 'Fake Lagging', 'FL'},
-        [10] = {'manual', 'Manual Yaw', 'M'},
-        [11] = {'safehead', 'Safe Head', 'SH'},
-        [12] = {'dormant', 'Dormant', 'D'}
-    },
-    ConditionSystem = {
-        Pitch = {
-            Standing = "Off", 
-            Running = "Off",
-            Slowwalking = "Off",
-            Crouching = "Off",
-            ["Crouch Moving"] = "Off",
-            Jumping = "Off", 
-            ["Air Crouching"] = "Off",
-            ["Fake Lagging"] = "Off",
-            ["Manual Yaw"] = "Off",
-            ["Safe Head"] = "Off",
-            Dormant = "Off"
-        },
-        Yaw = {
-            Standing = "180", 
-            Running = "180",
-            Slowwalking = "180",
-            Crouching = "180",
-            ["Crouch Moving"] = "180",
-            Jumping = "180", 
-            ["Air Crouching"] = "180",
-            ["Fake Lagging"] = "180",
-            ["Manual Yaw"] = "180",
-            ["Safe Head"] = "180",
-            Dormant = "180"
-        },
-        YawOffset = {
-            Standing = 0, 
-            Running = 0,
-            Slowwalking = 0,
-            Crouching = 0,
-            ["Crouch Moving"] = 0,
-            Jumping = 0, 
-            ["Air Crouching"] = 0,
-            ["Fake Lagging"] = 0,
-            ["Manual Yaw"] = 0,
-            ["Safe Head"] = 0,
-            Dormant = 0
-        },
-        YawJitter = {
-            Standing = "Off", 
-            Running = "Off",
-            Slowwalking = "Off",
-            Crouching = "Off",
-            ["Crouch Moving"] = "Off",
-            Jumping = "Off", 
-            ["Air Crouching"] = "Off",
-            ["Fake Lagging"] = "Off",
-            ["Manual Yaw"] = "Off",
-            ["Safe Head"] = "Off",
-            Dormant = "Off"
-        },
-        YawJitterOffset = {
-            Standing = 0, 
-            Running = 0,
-            Slowwalking = 0,
-            Crouching = 0,
-            ["Crouch Moving"] = 0,
-            Jumping = 0, 
-            ["Air Crouching"] = 0,
-            ["Fake Lagging"] = 0,
-            ["Manual Yaw"] = 0,
-            ["Safe Head"] = 0,
-            Dormant = 0
-        },
-        BodyYawMode = {
-            Standing = "Off", 
-            Running = "Off",
-            Slowwalking = "Off",
-            Crouching = "Off",
-            ["Crouch Moving"] = "Off",
-            Jumping = "Off", 
-            ["Air Crouching"] = "Off",
-            ["Fake Lagging"] = "Off",
-            ["Manual Yaw"] = "Off",
-            ["Safe Head"] = "Off",
-            Dormant = "Off"
-        },
-        BodyYawOffset = {
-            Standing = 0, 
-            Running = 0,
-            Slowwalking = 0,
-            Crouching = 0,
-            ["Crouch Moving"] = 0,
-            Jumping = 0, 
-            ["Air Crouching"] = 0,
-            ["Fake Lagging"] = 0,
-            ["Manual Yaw"] = 0,
-            ["Safe Head"] = 0,
-            Dormant = 0
-        },
-        FreestandingBodyYaw = {
-            Standing = false, 
-            Running = false,
-            Slowwalking = false,
-            Crouching = false,
-            ["Crouch Moving"] = false,
-            Jumping = false, 
-            ["Air Crouching"] = false,
-            ["Fake Lagging"] = false,
-            ["Manual Yaw"] = false,
-            ["Safe Head"] = false,
-            Dormant = false
-        },
-        EdgeYaw = {
-            Standing = false, 
-            Running = false,
-            Slowwalking = false,
-            Crouching = false,
-            ["Crouch Moving"] = false,
-            Jumping = false, 
-            ["Air Crouching"] = false,
-            ["Fake Lagging"] = false,
-            ["Manual Yaw"] = false,
-            ["Safe Head"] = false,
-            Dormant = false
-        },
-        Freestanding = {
-            Standing = false, 
-            Running = false,
-            Slowwalking = false,
-            Crouching = false,
-            ["Crouch Moving"] = false,
-            Jumping = false, 
-            ["Air Crouching"] = false,
-            ["Fake Lagging"] = false,
-            ["Manual Yaw"] = false,
-            ["Safe Head"] = false,
-            Dormant = false
-        },
-        Roll = {
-            Standing = 0, 
-            Running = 0,
-            Slowwalking = 0,
-            Crouching = 0,
-            ["Crouch Moving"] = 0,
-            Jumping = 0, 
-            ["Air Crouching"] = 0,
-            ["Fake Lagging"] = 0,
-            ["Manual Yaw"] = 0,
-            ["Safe Head"] = 0,
-            Dormant = 0
-        },
-        Defensive = {
-            Enabled = false,
-            Force = false,
-            Duration = 13,
-            Disablers = {"Body Yaw", "Yaw Jitter"},
-            Pitch = "None",
-            PitchValue = 0,
-            Yaw = "None",
-            YawValue = 0,
-            RemainingTicks = 0,
-            MaxTicks = 13
-        },
+        {'stand', 'Standing', 'S'},
+        {'run', 'Running', 'R'},
+        {'air', 'In Air', 'A'},
+        {'crouch', 'Crouching', 'C'},
+        {'crouch_move', 'Crouch Moving', 'CM'},
+        {'walk', 'Slow Walking', 'SW'},
+        {'air_crouch', 'Air Crouching', 'AC'},  -- New
+        {'fakeduck', 'Fake Ducking', 'FD'},  -- New
+        {'fakelag', 'Fake Lagging', 'FL'},
+        {'manual', 'Manual Yaw', 'M'},
+        {'safehead', 'Safe Head', 'SH'},
+        {'dormant', 'Dormant', 'D'}
     },
     Presets = {
         Custom = {
             [1] = {},
         },
     },
-
+    
+    -- Enhanced conditions system
     Conditions = {
+        -- Toggle conditions on/off
         Dormant = false,
         SafeHead = false,
-
+        
+        -- Safe Head weapon filters
         SafeHeadWeapons = {
             Knife = false,
             Zeus = false, 
             HeightAdvantage = false
         },
-
+        
+        -- Manual AA states
         ManualAA = {
             Active = false,
             Direction = nil, -- 'forward', 'left', 'right'
             LastDirection = nil
         },
-
+        
+        -- Exploit states
         Exploit = {
             DoubleTap = false,
             HideShots = false,
             FakeDuck = false
-        },
-
-        Defensive = {
-            Enabled = false,
-            Force = false,
-            Flicking = false,
-            RemainingTicks = 0,
-            MaxTicks = 13
         }
-    },
-
-    Functions = {
-        HeightAdvantage = function(localPlayer)
-            if not localPlayer then return false end
-            local origin = vector(entity.get_origin(localPlayer))
-            local threat = client.current_threat()
-            if not threat then return false end
-            local threat_origin = vector(entity.get_origin(threat))
-            local height_to_threat = origin.z - threat_origin.z
-            return height_to_threat > 50
-        end,
-        
-        IsFakeLagging = function()
-            return References.AntiAim.FakeLag.Enable:get() and 
-                   not (References.Rage.Aimbot.DoubleTap[1]:get() and References.Rage.Aimbot.DoubleTap[2]:get())
-        end,
-        
-        GetWeaponType = function(weapon)
-            if not weapon then return nil end
-            local csgoweapon = csgo_weapons(weapon)
-            if not csgoweapon then return nil end
-            
-            if csgoweapon.is_knife then return 'knife' end
-            if csgoweapon.is_taser then return 'zeus' end
-            return 'other'
-        end,
-        
-        ShouldUseSafeHead = function(weapon)
-            local weaponType = AA.Functions.GetWeaponType(weapon)
-            if weaponType == 'knife' and AA.Conditions.SafeHeadWeapons.Knife then
-                return true
-            elseif weaponType == 'zeus' and AA.Conditions.SafeHeadWeapons.Zeus then
-                return true
-            end
-            return false
-        end
     }
 }
 
@@ -831,7 +669,8 @@ local Menu = {
 		    Export = Groups.Angles:button('Export'),
 		    Delete = Groups.Angles:button('\aFF0000FFDelete'),
 
-            Upload = Groups.FakeLag:button('\v Upload To Cloud')
+            Upload = Groups.FakeLag:button('\v Upload To Cloud'),
+            UploadVisibility = Groups.FakeLag:combobox('Visibility', {'Private', 'Public'}),
         },
     },
 
@@ -868,38 +707,16 @@ local Menu = {
         --ActiveConditions = Groups.FakeLag:multiselect('Active Conditions', ConditionList),
         AntiAimType = Groups.FakeLag:combobox('Types', AntiAimTypes),
 
-        ConditionSettings = {
-            Builder = {
-                GUI.Header('Condition Settings', Groups.Angles),
+        Builder = {
+            GUI.Header('Condition Settings', Groups.Angles),
+            Condition = Groups.Angles:combobox("\v•\r  Condition  \a373737FF", table.distribute(AA.States, 2), nil, false),
 
-                SelectedCondition = Groups.Angles:combobox('Configure Condition', ConditionList),
-    
-                Pitch = Groups.Angles:combobox('Pitch', {'Off', 'Default', 'Up', 'Down', 'Zero', 'Custom'}),
-                YawBase = Groups.Angles:combobox('Yaw Base', {'Local View', 'At Targets'}),
-                Yaw = Groups.Angles:combobox('Yaw', {'Off', '180', 'Spin', 'Static', '180 Z', 'Crosshair'}),
-                YawOffset = Groups.Angles:slider('Yaw Offset', -180, 180, 0),
-                YawJitter = Groups.Angles:combobox('Yaw Jitter', {'Off', 'Offset', 'Center', 'Random', 'Skitter'}),
-                YawJitterOffset = Groups.Angles:slider('Yaw Jitter Offset', -180, 180, 0),
-                BodyYaw = Groups.Angles:combobox('Body Yaw', {"Off", 'Opposite', 'Jitter', 'Static'}),
-                BodyYawOffset = Groups.Angles:slider("Body Yaw Offset", -180, 180, 0),
-                FreestandingBodyYaw = Groups.Angles:checkbox('Freestanding Body Yaw'),
-                EdgeYaw = Groups.Angles:checkbox('Edge Yaw'),
-                Freestanding = Groups.Angles:checkbox('Freestanding'),
-                Roll = Groups.Angles:slider("Roll", -45, 45, 0),
-            },
+            States = {},
+        },
 
-            Defensive = {
-                GUI.Header('Defensive AA', Groups.Angles),
-                DefensiveEnabled = Groups.Angles:checkbox('Defensive AA'),
-                DefensiveForce = Groups.Angles:checkbox('Force Defensive'),
-                DefensiveDuration = Groups.Angles:slider('Defensive Duration', 1, 13, 13, true, 'ticks'),
-			    DefensiveDisablers = Groups.Angles:multiselect('Defensive Disablers', {"Body Yaw", "Yaw Jitter"}),
-                DefensivePitch = Groups.Angles:combobox('Defensive Pitch', {'None', 'Random', 'Up', 'Down', 'Custom'}),
-                DefensivePitchValue = Groups.Angles:slider('Defensive Pitch Value', -89, 89, 0, true, '°'),
-                DefensiveYaw = Groups.Angles:combobox('Defensive Yaw', {'None', 'Sideways', 'Random', 'Opposite', 'Custom'}),
-                DefensiveYawValue = Groups.Angles:slider('Defensive Yaw Value', -180, 180, 0, true, '°'),
+        Defensive = {
+            GUI.Header('Defensive AA', Groups.Angles),
 
-            },
         }
     },
 
@@ -919,6 +736,14 @@ local Menu = {
         BulletTracer = GUI.Feature({Groups.Angles:checkbox('BulletTracer')}, function(Parent)
             return {
                 Color = Groups.Angles:color_picker('Color', colors.accent.r, colors.accent.g, colors.accent.b, 255),
+            }, true
+        end),
+
+        CrosshairIndicator = GUI.Feature({Groups.Angles:checkbox('Crosshair Indicator')}, function(Parent)
+            return {
+                Elements = Groups.Angles:multiselect('Elements', {"Orion Solutions", "Condition", "Double Tap", "Hide Shots", "Min. Damage", "Ping Spike", "Freestanding"}),
+                Style = Groups.Angles:combobox('Style', {"Default", "Candy"}),
+                Color = Groups.Angles:color_picker('Text Color', 255, 255, 255, 255),
             }, true
         end),
     },
@@ -980,6 +805,42 @@ local Menu = {
     LOGGEDIN = Groups.Angles:checkbox('LOGGED IN'),
     ISADMIN = Groups.Angles:checkbox('IS ADMIN'),
 }
+
+do
+    local new = function (path, ref)
+		ref:set_callback(function (self) table.place(AA.Presets.Custom, path, self.value) end, true)
+		return ref
+	end
+
+    for i, v in ipairs(AA.States) do
+        local ID, Name, Short = v[1], v[2], v[3]
+
+        Menu.AntiAim.Builder.States[ID], pui.macros._p = {}, "\n" .. Short
+        local CTX = Menu.AntiAim.Builder.States[ID]
+
+        CTX.override = new({ID, "Override"}, Groups.Angles:checkbox("Override \v" .. Name))
+
+        CTX.Pitch = new({ID, "Pitch"}, Groups.Angles:combobox('Pitch', {'Off', 'Default', 'Up', 'Down', 'Zero', 'Custom'}))
+        CTX.YawBase = new({ID, "YawBase"}, Groups.Angles:combobox('Yaw Base', {'Local View', 'At Targets'}))
+        CTX.Yaw = new({ID, "Yaw"}, Groups.Angles:combobox('Yaw', {'Off', '180', 'Spin', 'Static', '180 Z', 'Crosshair'}))
+        CTX.YawOffset = new({ID, "YawOffset"}, Groups.Angles:slider('Yaw Offset', -180, 180, 0))
+        CTX.YawJitter = new({ID, "YawJitter"}, Groups.Angles:combobox('Yaw Jitter', {'Off', 'Offset', 'Center', 'Random', 'Skitter'}))
+        CTX.YawJitterOffset = new({ID, "YawJitterOffset"}, Groups.Angles:slider('Yaw Jitter Offset', -180, 180, 0))
+        CTX.BodyYaw = new({ID, "BodyYaw"}, Groups.Angles:combobox('Body Yaw', {"Off", 'Opposite', 'Jitter', 'Static'}))
+        CTX.BodyYawOffset = new({ID, "BodyYawOffset"}, Groups.Angles:slider("Body Yaw Offset", -180, 180, 0))
+        CTX.FreestandingBodyYaw = new({ID, "FreestandingBodyYaw"}, Groups.Angles:checkbox('Freestanding Body Yaw'))
+        CTX.EdgeYaw = new({ID, "EdgeYaw"}, Groups.Angles:checkbox('Edge Yaw'))
+        CTX.Freestanding = new({ID, "Freestanding"}, Groups.Angles:checkbox('Freestanding'))
+        CTX.Roll = new({ID, "Roll"}, Groups.Angles:slider("Roll", -45, 45, 0))
+
+        pui.traverse(CTX, function(ref, path)
+            ref:depend({Menu.AntiAim.Builder.Condition, Name}, path[#path] ~= "override" and CTX.override or nil)
+        end)
+    end
+
+    pui.macros._p = nil
+end
+
 
 client.exec('Clear')
 client.exec('con_filter_enable 0')
@@ -1089,16 +950,19 @@ local Render = {
 	end
 }
 
+-- State variables (place with your other vars)
 local aspect_ratio_active = false
 local aspect_ratio_value = 0
 local aspect_ratio_default = 0
 
+-- Calculate default aspect ratio
 local function calculate_default_aspect()
     local screen_width, screen_height = client.screen_size()
     aspect_ratio_default = screen_width / screen_height
     aspect_ratio_value = aspect_ratio_default
 end
 
+-- Handle aspect ratio changes
 local function update_aspect_ratio()
     if not aspect_ratio_active then return end
     
@@ -1119,10 +983,12 @@ local function update_aspect_ratio()
     end
 end
 
+-- Activate aspect ratio updates
 local function activate_aspect_ratio()
     aspect_ratio_active = true
 end
 
+-- Initialize aspect ratio system
 local function setup_aspect_ratio()
     calculate_default_aspect()
     
@@ -1134,7 +1000,8 @@ local function setup_aspect_ratio()
     end, true)
     
     Menu.Visuals.AspectRatio.Ratio:set_callback(activate_aspect_ratio, true)
-
+    
+    -- Reset on startup
     client.delay_call(0, function()
         client.set_cvar('r_aspectratio', 0)
     end)
@@ -1192,8 +1059,10 @@ Glow = function(x, y, w, h, glow_intensity, bg_r, bg_g, bg_b, bg_a, glow_r, glow
     end
 end
 
+-- Firebase Storage Configuration
 local FIREBASE_LOGO_URL = 'https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/logo.png?alt=media&token=67b51834-a77d-423c-8502-bea77a714cec'
 
+-- Global logo variables
 local logo = nil
 local logo_texture = nil
 local logo_loaded = false
@@ -1203,8 +1072,10 @@ local UserPfpCache = {}
 local function downloadFirebaseStorageFile(storagePathOrUrl, callback)
     local url
     if storagePathOrUrl:find('^https://') then
+        -- full URL (logo, special cases)
         url = storagePathOrUrl
     else
+        -- Firebase Storage path (pfps, etc.)
         url = 'https://firebasestorage.googleapis.com/v0/b/orion-solutions-68199.firebasestorage.app/o/'
             .. storagePathOrUrl .. '?alt=media'
     end
@@ -1218,7 +1089,9 @@ local function downloadFirebaseStorageFile(storagePathOrUrl, callback)
     end)
 end
 
+-- Load logo with caching and fallbacks
 local function loadLogo()
+    -- 1. Try local cache first
     pcall(function()
         logo = readfile('orion_logo.png')
         if logo then
@@ -1227,12 +1100,14 @@ local function loadLogo()
         end
     end)
 
+    -- 2. If no cache, download from Firebase Storage
     if not logo then
         downloadFirebaseStorageFile(FIREBASE_LOGO_URL, function(success, data)
             if success then
                 logo = data
                 logo_loaded = true
 
+                -- save to cache
                 pcall(function()
                     writefile('orion_logo.png', data)
                 end)
@@ -1258,7 +1133,23 @@ local function loadUserPfp(username, steamid, pathOrUrl, callback)
 
     downloadFirebaseStorageFile(pathOrUrl, function(success, data)
         if success then
-            local tex = renderer.load_png(data, 64, 64) 
+            local tex = nil
+            
+            -- Extract file extension from the URL
+            local extension = string.match(pathOrUrl:lower(), "%.([jpng]+)$")
+            
+            if extension == "png" then
+                tex = renderer.load_png(data, 64, 64)
+            elseif extension == "jpg" or extension == "jpeg" then
+                tex = renderer.load_jpg(data, 64, 64)
+            else
+                -- Fallback: try both loaders if extension detection fails
+                tex = renderer.load_png(data, 64, 64)
+                if not tex then
+                    tex = renderer.load_jpg(data, 64, 64)
+                end
+            end
+            
             if tex then
                 UserPfpCache[username] = tex
                 callback(tex)
@@ -1303,14 +1194,25 @@ local LocalPlayer = {
     State = 0,
     LastState = 0,
     ManualYaw = nil, 
-    Flicking = false,
-    Exploit = '',
+    Exploit = '', -- Current exploit state
     OnGround = false,
     Moving = false,
-    Crouching = false
+    Crouching = false,
+    FakeDucking = nil,
 }
 
-LocalPlayerState = function(cmd)
+LocalPlayer.GetExploitState = function()
+    if References.Rage.Other.Duck.value and References.Rage.Other.Duck:get_hotkey() then
+        return 'fd'
+    elseif References.Rage.Aimbot.DoubleTap[1]:get() and References.Rage.Aimbot.DoubleTap[2]:get() then
+        return 'dt'
+    elseif References.AntiAim.Other.OnShot[1]:get() and References.AntiAim.Other.OnShot[2]:get() then
+        return 'osaa'
+    end
+    return ''
+end
+
+LocalPlayer.UpdateState = function(cmd)
     LocalPlayer.Entity = entity.get_local_player()
     LocalPlayer.Valid = (LocalPlayer.Entity ~= nil) and entity.is_alive(LocalPlayer.Entity)
     
@@ -1326,10 +1228,13 @@ LocalPlayerState = function(cmd)
         LocalPlayer.InScore = cmd.in_score == 1
         LocalPlayer.Scoped = entity.get_prop(LocalPlayer.Entity, 'm_bIsScoped') == 1
         LocalPlayer.Weapon = entity.get_player_weapon(LocalPlayer.Entity)
-
+        LocalPlayer.FakeDucking = References.Rage.Other.Duck.value and References.Rage.Other.Duck:get_hotkey()
+        
         LocalPlayer.State = 1 -- Default to Standing
 
-        if LocalPlayer.OnGround then
+        if LocalPlayer.FakeDucking then
+            LocalPlayer.State = 8 -- Fake Ducking
+        elseif LocalPlayer.OnGround then
             if LocalPlayer.Crouching then
                 if LocalPlayer.Moving then
                     LocalPlayer.State = 5 -- Crouch Moving
@@ -1338,8 +1243,7 @@ LocalPlayerState = function(cmd)
                 end
             else
                 if LocalPlayer.Moving then
-                    if References.AntiAim.Other.SlowWalk[1] and References.AntiAim.Other.SlowWalk[1]:get() and 
-                       References.AntiAim.Other.SlowWalk[2] and References.AntiAim.Other.SlowWalk[2]:get() then
+                    if References.AntiAim.Other.SlowWalk:get() and References.AntiAim.Other.SlowWalk.hotkey:get() then
                         LocalPlayer.State = 6 -- Slow Walking
                     else
                         LocalPlayer.State = 2 -- Running
@@ -1359,210 +1263,73 @@ LocalPlayerState = function(cmd)
         local baseState = LocalPlayer.State
 
         if LocalPlayer.ManualYaw then 
-            LocalPlayer.State = 10 -- Manual yaw
-        elseif AA.Conditions.Dormant and #entity.get_players(true) == 0 then
-            LocalPlayer.State = 12 -- Dormant
+            LocalPlayer.State = 10 
         elseif References.AntiAim.FakeLag.Enable:get() and not (References.Rage.Aimbot.DoubleTap[1]:get() and References.Rage.Aimbot.DoubleTap[2]:get()) then
-            LocalPlayer.State = 9 -- Fake Lag
+            LocalPlayer.State = 9
         end
-
-        if AA.Conditions.SafeHead then
-            local csgoweapon = csgo_weapons(LocalPlayer.Weapon)
-            if csgoweapon then
-                local height_advantage = AA.Functions.HeightAdvantage(LocalPlayer.Entity)
-                if (csgoweapon.is_knife and AA.Conditions.SafeHeadWeapons.Knife) or
-                   (csgoweapon.is_taser and AA.Conditions.SafeHeadWeapons.Zeus) or
-                   (AA.Conditions.SafeHeadWeapons.HeightAdvantage and height_advantage) then
-                    LocalPlayer.State = 11
-                end
-            end
-        end
-
-        LocalPlayer.Flicking = AA.ConditionSystem.Defensive.Enabled and (
-            AA.ConditionSystem.Defensive.Force or 
-            AA.ConditionSystem.Defensive.RemainingTicks > 0 or
-            globals.tickcount() % 128 < 10
-        )
     end
 end
 
 AntiAim = function(cmd)
-    if not LocalPlayer.Valid then return end
-    
-    local stateData = AA.States[LocalPlayer.State]
-    if stateData and LocalPlayer.State ~= LocalPlayer.LastState then
+    if not LocalPlayer.Valid then
+        return
+    end
+
+    local StateData = AA.States[LocalPlayer.State]
+    if StateData and LocalPlayer.State ~= LocalPlayer.LastState then
         LocalPlayer.LastState = LocalPlayer.State
     end
 
-    local stateToConditionMap = {
-        [1] = "Standing",      
-        [2] = "Running",      
-        [3] = "Jumping",       
-        [4] = "Crouching",     
-        [5] = "Crouch Moving", 
-        [6] = "Slowwalking",   
-        [7] = "Air Crouching", 
-        [9] = "Fake Lagging",  
-        [10] = "Manual Yaw",   
-        [11] = "Safe Head",    
-        [12] = "Dormant"
-    }
+    local SateToConditionMap = {
+        [0] = "Default",
+        [1] = "Standing",
+        [2] = "Running",
+        [3] = "In-Air",
+        [4] = "Crouching",
+        [5] = "Couch Moving",
+        [6] = "Slowwalking",
+        [7] = "Air Crouching",
+        [8] = "Fake Ducking",
+        [9] = "Fake Lagging",
+        [10] = "Manual Yaw"
+    } 
 
-    local currentCondition = stateToConditionMap[LocalPlayer.State] or "Standing"
-    local pitchSetting = AA.ConditionSystem.Pitch[currentCondition] or "Off"
-    local yawOffset = AA.ConditionSystem.YawOffset[currentCondition] or 0
-    local yawSetting = AA.ConditionSystem.Yaw[currentCondition] or "180"
-    local yawJitterSetting = AA.ConditionSystem.YawJitter[currentCondition] or "Off"
-    local bodyYawMode = AA.ConditionSystem.BodyYawMode[currentCondition] or "Off"
-    local bodyYawOffset = AA.ConditionSystem.BodyYawOffset[currentCondition] or 0
-    local freestandingBodyYaw = AA.ConditionSystem.FreestandingBodyYaw[currentCondition] or false
-    local edgeYaw = AA.ConditionSystem.EdgeYaw[currentCondition] or false
-    local freestanding = AA.ConditionSystem.Freestanding[currentCondition] or false
-    local rollValue = AA.ConditionSystem.Roll[currentCondition] or 0
-    local yawJitterOffset = AA.ConditionSystem.YawJitterOffset[currentCondition] or 0
+    local CurrentStateID = StateData and StateData[1] or "Default"
+    local StateSettings = AA.Presets.Custom[CurrentStateID]
 
-    local isDefensiveActive = false
-    
-    if AA.ConditionSystem.Defensive.Enabled then
-        if AA.ConditionSystem.Defensive.Force then
-            isDefensiveActive = true
-            cmd.force_defensive = true
-        elseif LocalPlayer.Flicking then
-            isDefensiveActive = true
-        elseif AA.ConditionSystem.Defensive.RemainingTicks > 0 then
-            isDefensiveActive = true
-            AA.ConditionSystem.Defensive.RemainingTicks = AA.ConditionSystem.Defensive.RemainingTicks - 1
-        end
-    end
-    
-    if isDefensiveActive then
-        if table.find(AA.ConditionSystem.Defensive.Disablers, "Body Yaw") then
-            bodyYawMode = "Off"
-            bodyYawOffset = 0
-        end
-        
-        if table.find(AA.ConditionSystem.Defensive.Disablers, "Yaw Jitter") then
-            yawJitterSetting = "Off"
-        end
-
-        if AA.ConditionSystem.Defensive.Pitch ~= "None" then
-            if AA.ConditionSystem.Defensive.Pitch == "Random" then
-                pitchSetting = "Custom"
-                References.AntiAim.Angles.Pitch[2]:set(client.random_int(-89, 89))
-            elseif AA.ConditionSystem.Defensive.Pitch == "Up" then
-                pitchSetting = "Up"
-            elseif AA.ConditionSystem.Defensive.Pitch == "Down" then
-                pitchSetting = "Down"
-            elseif AA.ConditionSystem.Defensive.Pitch == "Custom" then
-                pitchSetting = "Custom"
-                References.AntiAim.Angles.Pitch[2]:set(AA.ConditionSystem.Defensive.PitchValue)
-            end
-        end
-
-        if AA.ConditionSystem.Defensive.Yaw ~= "None" then
-            if AA.ConditionSystem.Defensive.Yaw == "Sideways" then
-                yawSetting = "180"
-                yawOffset = globals.tickcount() % 4 < 2 and 90 or -90
-            elseif AA.ConditionSystem.Defensive.Yaw == "Random" then
-                yawSetting = "180"
-                yawOffset = client.random_int(-180, 180)
-            elseif AA.ConditionSystem.Defensive.Yaw == "Opposite" then
-                yawSetting = "180"
-                yawOffset = globals.tickcount() % 2 == 0 and 180 or -180
-                --local currentYaw = entity.get_prop(entity.get_local_player(), 'm_angEyeAngles[1]') or 0
-                --yawOffset = utils.normalize_yaw(currentYaw + 180)
-            elseif AA.ConditionSystem.Defensive.Yaw == "Custom" then
-                yawSetting = "180"
-                yawOffset = AA.ConditionSystem.Defensive.YawValue
-            end
-        end
-    else
-        AA.ConditionSystem.Defensive.RemainingTicks = 0
+    local OverrideEnabled = false
+    if Menu.AntiAim.Builder.States[CurrentStateID] and Menu.AntiAim.Builder.States[CurrentStateID].override then
+        OverrideEnabled = Menu.AntiAim.Builder.States[CurrentStateID].override:get()
     end
 
-    if pitchSetting == "Up" then
-        cmd.pitch = -89
-    elseif pitchSetting == "Down" then
-        cmd.pitch = 89
-    elseif pitchSetting == "Zero" then
-        cmd.pitch = 0
-    elseif pitchSetting == "Default" then
-        cmd.pitch = 0
-    elseif pitchSetting == "Custom" then
-        cmd.pitch = References.AntiAim.Angles.Pitch[2]:get()
-    elseif pitchSetting == "Off" then
+    local pitchSetting          = StateSettings.Pitch or "Off"
+    local yawBaseSetting        = StateSettings.YawBase or "Local View"
+    local yawSetting            = StateSettings.Yaw or "Off"
+    local yawOffset             = StateSettings.YawOffset or 0
+    local yawJitterSetting      = StateSettings.YawJitter or "Off"
+    local yawJitterOffset       = StateSettings.YawJitterOffset or 0
+    local bodyYawMode           = StateSettings.BodyYaw or "Off"
+    local bodyYawOffset         = StateSettings.BodyYawOffset or 0
+    local freestandingBodyYaw   = StateSettings.FreestandingBodyYaw or false
+    local edgeYaw               = StateSettings.EdgeYaw or false
+    local freestanding          = StateSettings.Freestanding or false
+    local rollValue             = StateSettings.Roll or 0
 
-    end
-
-    if yawSetting == "Off" then
-
-    elseif yawSetting == "180" then
-        cmd.yaw = cmd.yaw + 180
-    elseif yawSetting == "Spin" then
-        cmd.yaw = (globals.tickcount() * 5) % 360
-    elseif yawSetting == "Static" then
-        cmd.yaw = cmd.yaw + yawOffset
-    elseif yawSetting == "180 Z" then
-        if globals.tickcount() % 2 == 0 then
-            cmd.yaw = cmd.yaw + 180
-        else
-            cmd.yaw = cmd.yaw
-        end
-    elseif yawSetting == "Crosshair" then
-        local viewYaw = client.camera_angles()
-        cmd.yaw = viewYaw
-    end
-
-    if yawJitterSetting == "Off" then
-    elseif yawJitterSetting == "Offset" then
-        if globals.tickcount() % 2 == 0 then
-            cmd.yaw = cmd.yaw + yawJitterOffset
-        else
-            cmd.yaw = cmd.yaw - yawJitterOffset
-        end
-    elseif yawJitterSetting == "Center" then
-        local jitter = math.sin(globals.curtime() * 10) * yawJitterOffset
-        cmd.yaw = cmd.yaw + jitter
-    elseif yawJitterSetting == "Random" then
-        cmd.yaw = cmd.yaw + client.random_int(-yawJitterOffset, yawJitterOffset)
-    elseif yawJitterSetting == "Skitter" then
-        local direction = (globals.tickcount() % 4 < 2) and 1 or -1
-        local jitterAmount = client.random_int(math.floor(yawJitterOffset / 2), yawJitterOffset)
-        cmd.yaw = cmd.yaw + (direction * jitterAmount)
-    end
-
-    --References.AntiAim.Angles.Pitch[1]:set(pitchSetting)
-    --References.AntiAim.Angles.Yaw[1]:set(yawSetting)
-    --References.AntiAim.Angles.YawJitter[1]:set(yawJitterSetting)
-    References.AntiAim.Angles.BodyYaw[1]:set(bodyYawMode)
-    References.AntiAim.Angles.BodyYaw[2]:set(bodyYawOffset)
-    References.AntiAim.Angles.FreestandingBodyYaw:set(freestandingBodyYaw)
-    References.AntiAim.Angles.EdgeYaw:set(edgeYaw)
-    References.AntiAim.Angles.Freestanding:set(freestanding)
-    References.AntiAim.Angles.Roll:set(rollValue)
-    --References.AntiAim.Angles.Yaw[2]:override(yawOffset)
-
-    local yawBaseSetting = Menu.AntiAim.ConditionSettings.Builder.YawBase:get()
-    References.AntiAim.Angles.YawBase:set(yawBaseSetting)
-end
-
-function TriggerDefensiveAA(duration)
-    if AA.ConditionSystem.Defensive.Enabled then
-        AA.ConditionSystem.Defensive.RemainingTicks = duration or AA.ConditionSystem.Defensive.MaxTicks
+    if OverrideEnabled then
+        References.AntiAim.Angles.Pitch[1]:set(pitchSetting)
+        References.AntiAim.Angles.YawBase:set(yawBaseSetting)
+        References.AntiAim.Angles.Yaw[1]:set(yawSetting)
+        References.AntiAim.Angles.Yaw[2]:override(yawOffset)
+        References.AntiAim.Angles.YawJitter[1]:set(yawJitterSetting)
+        References.AntiAim.Angles.YawJitter[2]:override(yawJitterOffset)
+        References.AntiAim.Angles.BodyYaw[1]:set(bodyYawMode)
+        References.AntiAim.Angles.BodyYaw[2]:set(bodyYawOffset)
+        References.AntiAim.Angles.FreestandingBodyYaw:set(freestandingBodyYaw)
+        References.AntiAim.Angles.EdgeYaw:set(edgeYaw)
+        References.AntiAim.Angles.Freestanding:set(freestanding)
+        References.AntiAim.Angles.Roll:set(rollValue)
     end
 end
-
-client.set_event_callback('player_hurt', function(e)
-    if client.userid_to_entindex(e.userid) == entity.get_local_player() then
-        TriggerDefensiveAA(AA.ConditionSystem.Defensive.MaxTicks)
-    end
-end)
-
-client.set_event_callback('weapon_fire', function(e)
-    if client.userid_to_entindex(e.userid) == entity.get_local_player() then
-        TriggerDefensiveAA(5)
-    end
-end)
 
 local notification = {
     start_time = 0,       
@@ -1637,12 +1404,14 @@ WaterMark = function()
     local TextWidth, TextHeight = renderer.measure_text(nil, fullText)
     local Left = Globals.ScreenX - TextWidth - 25
 
+    -- background + glow
     Glow(Left - 33, 9, TextWidth + 12 + 17, 22, 2, 23, 23, 23, 255, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a, true)
     RoundedRect(Left - 32, 10, TextWidth + 10 + 17, 20, 23, 23, 23, 255, 5)
 
     Render.Rectangle(Left - 33, 9, TextWidth + 12 + 17, 22, 5, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a)
     Render.Rectangle(Left - 32, 10, TextWidth + 10 + 17, 20, 5, 23, 23, 23, 255)
 
+    -- draw watermark text
     local currentX = Left - 10
     renderer.text(currentX, 10 + TextHeight/4, 255, 255, 255, 255, nil, 200, 'Orion Solutions •')
     currentX = currentX + renderer.measure_text(nil, 'Orion Solutions •')
@@ -1662,18 +1431,132 @@ WaterMark = function()
 
     renderer.text(currentX, 10 + TextHeight/4, colors.accent.r, colors.accent.g, colors.accent.b, colors.accent.a, nil, 200, versionText)
 
+    -- draw profile picture
     local SteamID3 = panorama.open().MyPersonaAPI.GetXuid()
     getUserProfileImage(Globals.UserData.Username, SteamID3, function(tex)
         if not tex then
+            -- fallback: steam avatar (square)
             local fallback = images.get_steam_avatar(SteamID3)
             fallback:draw(Left - 28, 13, 15, 15)
             renderer.circle_outline(Left - 20, 20, 23, 23, 23, 255, 10, 0, 1, 3)
             return
         end
-        
+
+        -- circular PFP render
         renderer.texture(tex, Left - 28, 13, 15, 15, 255, 255, 255, 255, 'f')
         renderer.circle_outline(Left - 20, 20, 23, 23, 23, 255, 10, 0, 1, 3)
     end)
+end
+
+local function get_current_condition()
+    local stateToConditionMap = {
+        [1] = "Standing",
+        [2] = "Running", 
+        [3] = "Jumping",
+        [4] = "Crouching", 
+        [5] = "Crouch Moving", 
+        [6] = "Slowwalking",   
+        [7] = "Air Crouching", 
+        [8] = "Fake Ducking",  -- NEW
+        [9] = "Fake Lagging", 
+        [10] = "Manual Yaw", 
+        [11] = "Safe Head",
+        [12] = "Dormant" 
+    }
+    
+    return stateToConditionMap[LocalPlayer.State] or "STANDING"
+end
+
+local SimpleUI = {
+    Name = "Orion Solutions",
+    Build = Globals.UserData.Version or 'Unknown',
+    CurrentCondition = get_current_condition() or "Unknown",
+    ImageSize = 32,
+    Avatar = nil,
+    AvatarLoaded = false,
+    PanoramaAPI = panorama.open()
+}
+
+SimpleUI.GetLocalPlayerXuid = function()
+    local my_persona_api = SimpleUI.PanoramaAPI.MyPersonaAPI
+    return my_persona_api and my_persona_api.GetXuid() or 0ULL
+end
+
+SimpleUI.LoadProfilePicture = function(callback)
+    if not Globals.UserData.LoggedIN then
+        local steam_avatar = images.get_steam_avatar(SimpleUI.GetLocalPlayerXuid(), SimpleUI.ImageSize)
+        callback(steam_avatar)
+        return
+    end
+
+    local username = Globals.UserData.Username
+    local steamid = SimpleUI.GetLocalPlayerXuid()
+    
+    getUserProfileImage(username, steamid, function(firebase_tex)
+        if firebase_tex then
+            callback(firebase_tex)
+        else
+            local steam_avatar = images.get_steam_avatar(steamid, SimpleUI.ImageSize)
+            callback(steam_avatar)
+        end
+    end)
+end
+
+SimpleUI.Paint = function()
+    if not SimpleUI.AvatarLoaded then
+        SimpleUI.LoadProfilePicture(function(tex)
+            SimpleUI.Avatar = tex
+            SimpleUI.AvatarLoaded = true
+        end)
+        return
+    end
+
+    local screen_x, screen_y = client.screen_size()
+    local position_x, position_y = 5, screen_y / 2
+
+    SimpleUI.Build = Globals.UserData.Version or 'Unknown'
+
+    SimpleUI.CurrentCondition = get_current_condition() or "Unknown"
+
+    local text_lines = {
+        string.format('%s', SimpleUI.Name),
+        string.format('[%s]', string.upper(SimpleUI.Build)),
+        string.format('Condition: %s', SimpleUI.CurrentCondition)  -- Add condition line
+    }
+    local text = table.concat(text_lines, '\n')
+
+    local text_width, text_height = renderer.measure_text('-', text)
+
+    if SimpleUI.Avatar ~= nil then
+        position_y = position_y - SimpleUI.ImageSize / 2
+
+        if type(SimpleUI.Avatar) == 'userdata' and SimpleUI.Avatar.draw then
+            SimpleUI.Avatar:draw(
+                position_x, position_y,
+                SimpleUI.ImageSize, SimpleUI.ImageSize,
+                255, 255, 255, 255, 'f'
+            )
+        else
+            renderer.texture(
+                SimpleUI.Avatar, position_x, position_y,
+                SimpleUI.ImageSize, SimpleUI.ImageSize,
+                255, 255, 255, 255, 'f'
+            )
+        end
+
+        position_x = position_x + SimpleUI.ImageSize + 5
+        position_y = position_y + (SimpleUI.ImageSize - text_height) / 2
+    else
+        position_y = position_y - text_height / 2
+    end
+
+    local accent_r, accent_g, accent_b = Menu.Miscellaneous.AccentColor:get()
+
+    renderer.text(
+        position_x, position_y,
+        accent_r, accent_g, accent_b, 255,
+        '-', nil, text
+    )
 end
 
 local Shots = Shots or {}
@@ -1683,7 +1566,7 @@ local CasinoLogs = CasinoLogs or {}
 local HitgroupNames = {'Generic', 'Head', 'Chest', 'Stomach', 'Left Arm', 'right Arm', 'Left Leg', 'Right Leg', 'Neck', '?', 'Gear'}
 
 DrawLog = function(text, x, y, r, g, b, a, text2)
-    -- measure main text (right body)
+     -- measure main text (right body)
     local width, height = renderer.measure_text('b', text)
     height = math.max(20, height + 6) -- keep min height = 20
 
@@ -2039,7 +1922,7 @@ MenuUpdate = function()
 		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Home'})
 	end)
 
-    pui.traverse({Menu.Home.ConfigSystem.NewConfigHeader, Menu.Home.ConfigSystem.Name, Menu.Home.ConfigSystem.Create, Menu.Home.ConfigSystem.Import, Menu.Home.ConfigSystem.Export, Menu.Home.ConfigSystem.Upload}, function(ref, path)
+    pui.traverse({Menu.Home.ConfigSystem.NewConfigHeader, Menu.Home.ConfigSystem.Name, Menu.Home.ConfigSystem.Create, Menu.Home.ConfigSystem.Import, Menu.Home.ConfigSystem.Export, Menu.Home.ConfigSystem.Upload, Menu.Home.ConfigSystem.UploadVisibility}, function(ref, path)
         ref:depend({Menu.LOGGEDIN, true}, {Menu.Home.ConfigSystem.Type, 'Local'})
     end)
 
@@ -2055,11 +1938,11 @@ MenuUpdate = function()
 		ref:depend({Menu.LOGGEDIN, true}, {Menu.Tabs, 'Anti-Aim'})
 	end)
 
-    pui.traverse(Menu.AntiAim.ConditionSettings.Builder, function(ref, path)
+    pui.traverse(Menu.AntiAim.Builder, function(ref, path)
 		ref:depend({Menu.LOGGEDIN, true}, {Menu.AntiAim.AntiAimType, 'Builder'})
 	end)
 
-    pui.traverse(Menu.AntiAim.ConditionSettings.Defensive, function(ref, path)
+    pui.traverse(Menu.AntiAim.Defensive, function(ref, path)
 		ref:depend({Menu.LOGGEDIN, true}, {Menu.AntiAim.AntiAimType, 'Defensive'})
 	end)
 
@@ -2077,118 +1960,9 @@ MenuUpdate = function()
     Menu.Casino.BetAmount:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, 'Coin Flip'})
     Menu.Casino.BetAmountLabel:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, 'Coin Flip'})
     Menu.Casino.Flip:depend({Menu.LOGGEDIN, true}, {Menu.Casino.Game, 'Coin Flip'})
-
-    Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:set_callback(function(self)
-        local selectedCondition = self:get()
-        Menu.AntiAim.ConditionSettings.Builder.Pitch:set(AA.ConditionSystem.Pitch[selectedCondition] or "Off")
-        Menu.AntiAim.ConditionSettings.Builder.Yaw:set(AA.ConditionSystem.Yaw[selectedCondition] or "180")
-        Menu.AntiAim.ConditionSettings.Builder.YawOffset:set(AA.ConditionSystem.YawOffset[selectedCondition] or 0)
-        Menu.AntiAim.ConditionSettings.Builder.YawJitter:set(AA.ConditionSystem.YawJitter[selectedCondition] or "Off")
-        Menu.AntiAim.ConditionSettings.Builder.YawJitterOffset:set(AA.ConditionSystem.YawJitterOffset[selectedCondition] or 0)
-        Menu.AntiAim.ConditionSettings.Builder.BodyYaw:set(AA.ConditionSystem.BodyYawMode[selectedCondition] or "Off")
-        Menu.AntiAim.ConditionSettings.Builder.BodyYawOffset:set(AA.ConditionSystem.BodyYawOffset[selectedCondition] or 0)
-        Menu.AntiAim.ConditionSettings.Builder.FreestandingBodyYaw:set(AA.ConditionSystem.FreestandingBodyYaw[selectedCondition] or false)
-        Menu.AntiAim.ConditionSettings.Builder.EdgeYaw:set(AA.ConditionSystem.EdgeYaw[selectedCondition] or false)
-        Menu.AntiAim.ConditionSettings.Builder.Freestanding:set(AA.ConditionSystem.Freestanding[selectedCondition] or false)
-        Menu.AntiAim.ConditionSettings.Builder.Roll:set(AA.ConditionSystem.Roll[selectedCondition] or 0)
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.Pitch:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.Pitch[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.Yaw:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.Yaw[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.YawOffset:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.YawOffset[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.YawJitter:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.YawJitter[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.YawJitterOffset:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.YawJitterOffset[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.BodyYaw:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.BodyYawMode[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.BodyYawOffset:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.BodyYawOffset[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.FreestandingBodyYaw:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.FreestandingBodyYaw[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.EdgeYaw:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.EdgeYaw[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.Freestanding:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.Freestanding[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Builder.Roll:set_callback(function(self)
-        local selectedCondition = Menu.AntiAim.ConditionSettings.Builder.SelectedCondition:get()
-        AA.ConditionSystem.Roll[selectedCondition] = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensiveEnabled:set_callback(function(self)
-        AA.ConditionSystem.Defensive.Enabled = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensiveForce:set_callback(function(self)
-        AA.ConditionSystem.Defensive.Force = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensiveDuration:set_callback(function(self)
-        AA.ConditionSystem.Defensive.Duration = self:get()
-        AA.ConditionSystem.Defensive.MaxTicks = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensiveDisablers:set_callback(function(self)
-        AA.ConditionSystem.Defensive.Disablers = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensivePitch:set_callback(function(self)
-        AA.ConditionSystem.Defensive.Pitch = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensivePitchValue:set_callback(function(self)
-        AA.ConditionSystem.Defensive.PitchValue = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensiveYaw:set_callback(function(self)
-        AA.ConditionSystem.Defensive.Yaw = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensiveYawValue:set_callback(function(self)
-        AA.ConditionSystem.Defensive.YawValue = self:get()
-    end)
-
-    Menu.AntiAim.ConditionSettings.Defensive.DefensivePitchValue:depend({Menu.AntiAim.ConditionSettings.Defensive.DefensiveEnabled, true}, {Menu.AntiAim.ConditionSettings.Defensive.DefensivePitch, 'Custom'})
-    Menu.AntiAim.ConditionSettings.Defensive.DefensiveYawValue:depend({Menu.AntiAim.ConditionSettings.Defensive.DefensiveEnabled, true}, {Menu.AntiAim.ConditionSettings.Defensive.DefensiveYaw, 'Custom'})
 end
 
 client.set_event_callback('paint_ui', function()
-    References.AntiAim.Angles.Pitch[1]:set_visible(false)
-    References.AntiAim.Angles.Pitch[2]:set_visible(false)
-
     References.AntiAim.Angles.Yaw[1]:set_visible(false)
     References.AntiAim.Angles.Yaw[2]:set_visible(false)
 
@@ -2314,7 +2088,6 @@ local function getOnlineUsersCount(callback)
 end
 
 Login = function(username, password, remember)
-    -- Check if this is an auto-login attempt
     local is_auto_login = false
     local saved = database.read('orion_credentials')
     if saved then
@@ -2345,17 +2118,15 @@ Login = function(username, password, remember)
             return
         end
 
-        -- SteamID verification
-        local current_steamid = panorama.open().MyPersonaAPI.GetXuid()
-        if user.steamid and user.steamid ~= current_steamid then
+        local CurrentHWID = GetHWID()
+        if user.HWID and user.HWID ~= CurrentHWID then
             Menu.Auth.StatusLabel:override('Account Is Locked To Another HWID')
             return
         end
 
-        -- If no SteamID is stored yet, store it now
-        if not user.steamid then
+        if not user.HWID then
             FireBase.update(PATHS.Users .. '/' .. username, {
-                steamid = current_steamid
+                HWID = CurrentHWID
             }, function(update_success)
                 if not update_success then
                     utils.printc(pui.format(string.format('\f<z>[\f<orion>Firebase\f<z>] Failed To Store HWID For User: \f<orion>%s', username)))
@@ -2371,11 +2142,10 @@ Login = function(username, password, remember)
                 login_time = Time.RealTime(),
                 is_admin = user.is_admin or false,
                 version = user.version or 'Live',
-                steamid = current_steamid  -- Include SteamID in online users
+                HWID = CurrentHWID
             }
         }
-        
-        -- Initialize stats with existing data or defaults
+
         Globals.UserData.Stats = {
             KillCount = user.stats and user.stats.KillCount or 0,
             Coins = user.stats and user.stats.Coins or 0,
@@ -2389,26 +2159,23 @@ Login = function(username, password, remember)
                 Globals.UserData.UserID = userid_str
                 Globals.UserData.IsAdmin = user.is_admin or false
                 Globals.UserData.Version = user.version or 'Live'
-                Globals.UserData.SteamID = current_steamid
+                Globals.UserData.HWID = CurrentHWID
                 Globals.UserData.LoginTime = Time.RealTime()
-                
-                -- Only save credentials if remember is true AND we're not auto-logging in
+
                 if remember and not is_auto_login then
                     SaveCredentials(username, password)
                 end
                 
                 MenuUpdate()
                 Menu.Auth.StatusLabel:override('Login successful')
-                
-                -- Update menu with stats
+
                 if Menu.Stats then
                     Menu.Stats.KillCounter:override('\f<silent>Kills: \v' .. Globals.UserData.Stats.KillCount)
                     Menu.Stats.CoinCounter:override('\f<silent>Coins: \v' .. Globals.UserData.Stats.Coins)
                     Menu.Stats.TimesLoaded:override('\f<silent>Times Loaded: \v' .. Globals.UserData.Stats.TimesLoaded)
                     Menu.Casino.Balance:override('\f<silent>Balance: \v' .. Globals.UserData.Stats.Coins)
                 end
-                
-                -- Initialize online users count after successful login
+
                 getOnlineUsersCount(function(count)
                     Globals.OnlineUsers = count
                 end)
@@ -2419,10 +2186,9 @@ Login = function(username, password, remember)
         end)
 
         if user == nil or user == json.null then
-    Menu.Auth.StatusLabel:override("User doesn't exist")
-    return
-end
-
+            Menu.Auth.StatusLabel:override("User doesn't exist")
+            return
+        end
     end)
 end
 
@@ -2526,6 +2292,7 @@ client.set_event_callback('paint_ui', function()
     local Screen = vector(client.screen_size())
     WaterMark()
     RenderScreenLogs()
+    SimpleUI.Paint()
 
     if Globals.UserData.LoggedIN then
         Menu.Home.Statistics.KillCounter:override(pui.macros.silent .. 'Kills: \v' .. Globals.UserData.Stats.KillCount)
@@ -2534,6 +2301,139 @@ client.set_event_callback('paint_ui', function()
         Menu.Home.Statistics.OnlineUsers:override(pui.macros.silent .. 'Online: \v' .. Globals.OnlineUsers)
         Menu.Casino.Balance:override(pui.macros.silent .. 'Balance: \v' .. Globals.UserData.Stats.Coins)
     end
+end)
+
+-- Crosshair Indicator System
+local CrosshairIndicator = {
+    alpha_values = {},
+    y_values = {},
+    transparency = 0
+}
+
+local function render_crosshair_indicator()
+    if not Menu.Visuals.CrosshairIndicator.on.value then return end
+    if not LocalPlayer.Valid then return end
+
+    local weapon = entity.get_player_weapon(LocalPlayer.Entity)
+    if not weapon then return end
+    
+    local csgoweapon = weapons(weapon)
+    if not csgoweapon then return end
+
+    -- Calculate transparency based on game state
+    local game_rules = entity.get_game_rules()
+    if game_rules then
+        local m_gamePhase = entity.get_prop(game_rules, 'm_gamePhase')
+        local NextPhase = entity.get_prop(game_rules, 'm_timeUntilNextPhaseStarts')
+        CrosshairIndicator.transparency = MathUtil.lerp(
+            CrosshairIndicator.transparency, 
+            (csgoweapon.is_grenade or LocalPlayer.InScore or (m_gamePhase == 5) or (NextPhase ~= 0)) and 0.5 or 1, 
+            0.03
+        )
+    end
+
+    -- Define elements and their states
+    local elements_data = {
+        {"Orion Solutions", true}, -- Always active
+        {"Condition", true}, -- Always active, shows current condition
+        {"Double Tap", References.Rage.Aimbot.DT.value and References.Rage.Aimbot.DT:get_hotkey()},
+        {"Hide Shots", References.AntiAim.Other.OnShot.value and References.AntiAim.Other.OnShot:get_hotkey()},
+        {"Min. Damage", References.Rage.Aimbot.DamageOverride.value and References.Rage.Aimbot.DamageOverride:get_hotkey()},
+        {"Ping Spike", References.Miscellaneous.PingSpike.value and References.Miscellaneous.PingSpike:get_hotkey()},
+        {"Freestanding", References.AntiAim.Angles.Freestanding.value}
+    }
+
+    local y_offset = 20
+    local flags = '-cd'
+    local r, g, b, a = Menu.Visuals.CrosshairIndicator.Color:get()
+    a = a * CrosshairIndicator.transparency
+
+    -- Initialize arrays if needed
+    for i = 1, #elements_data do
+        if not CrosshairIndicator.alpha_values[i] then
+            CrosshairIndicator.alpha_values[i] = 0
+            CrosshairIndicator.y_values[i] = 0
+        end
+    end
+
+    -- Render elements
+    for i, element_data in ipairs(elements_data) do
+        local element_name, element_active = element_data[1], element_data[2]
+        
+        -- Special handling for Orion Solutions - always enabled in menu
+        if element_name == "Orion Solutions" then
+            element_enabled = true
+        -- Special handling for Condition - always enabled in menu  
+        elseif element_name == "Condition" then
+            element_enabled = true
+        else
+            -- Check if this element is enabled in the menu
+            element_enabled = false
+            for _, enabled_element in ipairs(Menu.Visuals.CrosshairIndicator.Elements.value) do
+                if enabled_element == element_name then
+                    element_enabled = true
+                    break
+                end
+            end
+        end
+
+        if not element_enabled then
+            CrosshairIndicator.alpha_values[i] = MathUtil.lerp(CrosshairIndicator.alpha_values[i], 0, 0.03)
+            goto continue
+        end
+
+        -- Update alpha and y values
+        CrosshairIndicator.alpha_values[i] = MathUtil.lerp(
+            CrosshairIndicator.alpha_values[i], 
+            element_active and CrosshairIndicator.transparency or 0, 
+            0.03
+        )
+
+        if CrosshairIndicator.alpha_values[i] > 0.01 then
+            local text = element_name:upper()
+            
+            -- Special text for Condition element
+            if element_name == "Condition" then
+                text = get_current_condition()
+            end
+            
+            local text_width, text_height = renderer.measure_text(flags, text)
+            
+            CrosshairIndicator.y_values[i] = MathUtil.lerp(
+                CrosshairIndicator.y_values[i], 
+                element_active and text_height or 0, 
+                0.03
+            )
+
+            local current_alpha = a * CrosshairIndicator.alpha_values[i]
+            
+            -- Apply candy style if enabled
+            if Menu.Visuals.CrosshairIndicator.Style.value == "Candy" and element_active then
+                local accent_r, accent_g, accent_b = Menu.Miscellaneous.AccentColor:get()
+                renderer.text(
+                    Globals.ScreenX / 2, 
+                    Globals.ScreenY / 2 + y_offset,
+                    accent_r, accent_g, accent_b, current_alpha, flags, 0, text
+                )
+            else
+                renderer.text(
+                    Globals.ScreenX / 2, 
+                    Globals.ScreenY / 2 + y_offset,
+                    r, g, b, current_alpha, flags, 0, text
+                )
+            end
+            
+            y_offset = y_offset + CrosshairIndicator.y_values[i]
+        end
+
+        ::continue::
+    end
+end
+
+client.set_event_callback('paint', function()
+    if not Globals.UserData.LoggedIN then return end
+
+    render_crosshair_indicator()
 end)
 
 
@@ -2743,14 +2643,13 @@ client.set_event_callback('setup_command', function(cmd)
     ImprovedPrediction()
     UpdateNetvars(cmd)
     FastLadder(cmd)
-    LocalPlayerState(cmd)
+    LocalPlayer.UpdateState(cmd)
     AntiAim(cmd)
 
-    local air_strafe = ui.reference('Misc', 'Movement', 'Air strafe')
     if Menu.Rage.JumpScout:get() then
         local vel_x, vel_y = entity.get_prop(entity.get_local_player(), 'm_vecVelocity')
         local vel = math.sqrt(vel_x^2 + vel_y^2)
-        ui.set(air_strafe, not (cmd.in_jump and (vel < 10)) or ui.is_menu_open())
+        References.Miscellaneous.Movement.AirStrafe:set(not (cmd.in_jump and (vel < 10)) or ui.is_menu_open())
     end
 end)
 
@@ -2965,8 +2864,8 @@ client.delay_call(0, function()
             -- Check SteamID before auto-login
             FireBase.read(PATHS.Users .. '/' .. credentials.username, function(success, user)
                 if success and user then
-                    local current_steamid = panorama.open().MyPersonaAPI.GetXuid()
-                    if not user.steamid or user.steamid == current_steamid then
+                    local CurrentHWID = GetHWID()
+                    if not user.HWID or user.HWID == CurrentHWID then
                         -- Proceed with auto-login
                         Menu.Auth.UserName:set(credentials.username)
                         Menu.Auth.PassWord:set(credentials.password)
@@ -3007,6 +2906,7 @@ RefreshCloudConfigList = function()
     local username = Globals.UserData.Username or 'Unknown'
     utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Refreshing cloud configs for user: \f<orion>%s', username)))
 
+    -- Only get private configs for the Lua menu
     FireBase.read('/configs/' .. username, function(success, data)
         if not success or not data or data == json.null then
             utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No cloud configs found for user: \f<orion>%s', username)))
@@ -3028,9 +2928,10 @@ RefreshCloudConfigList = function()
         for cfgName, cfgData in pairs(data) do
             if cfgData and cfgData.cfg then
                 -- Store as array element with name and config data
-                table.insert(db.db.configs['Cloud'], {cfgName, cfgData.cfg})
+                table.insert(db.db.configs['Cloud'], {cfgName, cfgData.cfg, cfgData.visibility or 'private'})
                 local author = cfgData.author or username
-                table.insert(displayList, string.format('[%s] ~ %s', author, cfgName))
+                local visibility = cfgData.visibility == 'Public' and '[PUBLIC] ' or '[PRIVATE] '
+                table.insert(displayList, string.format('%s[%s] ~ %s', visibility, author, cfgName))
             end
         end
 
@@ -3048,19 +2949,16 @@ RefreshCloudConfigList = function()
             if firstConfig then
                 Menu.Home.ConfigSystem.Selected:set('Selected - \v' .. (firstConfig[1] or 'Unknown'))
             end
-
-            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loaded cloud configs: \f<orion>%d', #displayList)))
         else
             Menu.Home.ConfigSystem.List:update({'No Cloud Configs'})
             Menu.Home.ConfigSystem.List:set(0)
             Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
-            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>No cloud configs available')))
         end
     end)
 end
 
 local Config do 
-    Config = pui.setup(Menu)
+    Config = pui.setup(Menu, Builder)
 
     Update = function()
         db.configs = {}
@@ -3223,7 +3121,7 @@ local Config do
             return
         end
 
-        utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loading \f<orion> %s \f<z>Config: \f<orion>%s', cfgType, name)))
+        utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loading \f<orion>%s \f<z>Config: \f<orion>%s', cfgType, name)))
 
         local success, decrypted = pcall(json.parse, base64.decode(config))
         if success and decrypted then
@@ -3251,7 +3149,7 @@ local Config do
 
     Menu.Home.ConfigSystem.List:set_callback(function(self)
         local cfgType = Menu.Home.ConfigSystem.Type:get() or 'Local'
-    
+
         if cfgType == 'Cloud' then
             local cloudConfigs = db.db.configs['Cloud'] or {}
             local selectedConfig = cloudConfigs[self.value + 1]
@@ -3289,52 +3187,69 @@ local Config do
             utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Cannot Upload \f<orion>Default \f<z>Config!')))
             return
         end
-    
+
         if not cfg or cfg == '' then
             utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Config data missing for: \f<orion>%s', name)))
             return
         end
 
         local username = Globals.UserData.Username or 'Unknown'
-        local path = string.format('/configs/%s/%s', username, name)
-
+        local visibility = Menu.Home.ConfigSystem.UploadVisibility:get() or 'Private'
+    
+        -- Always store in user's private configs for management
+        local privatePath = string.format('/configs/%s/%s', username, name)
+    
         local data = {
             author = username,
             cfg = cfg,
-            timestamp = Time.UnixTime()
+            timestamp = Time.UnixTime(),
+            visibility = visibility,
+            uploader_username = username
         }
 
-        FireBase.write(path, data, function(success, response)
-            if success then
+        -- Upload to private storage first
+        FireBase.write(privatePath, data, function(private_success, private_response)
+            if private_success then
                 utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Successfully uploaded config: \f<orion>%s', name)))
+            
+                -- If public, also upload to public configs
+                if visibility == 'Public' then
+                    local publicPath = string.format('/public_configs/%s', name)
+                    FireBase.write(publicPath, data, function(public_success, public_response)
+                        if public_success then
+                            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Config marked as public and available on website')))
+                        else
+                            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Config saved privately but failed to mark as public')))
+                        end
+                    end)
+                end
             else
-                utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Failed to upload config: \f<orion>%s — %s', name, tostring(response))))
+                utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Failed to upload config: \f<orion>%s — %s', name, tostring(private_response))))
             end
         end)
     end)
 
     Menu.Home.ConfigSystem.Type:set_callback(function(this)
         local currentValue = this.value
-        local cfgType = currentValue or 'Local'
+        local cfgType = currentValue or 'Local'  -- Since value is already the string
 
         if cfgType == 'Cloud' then
-            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Switching to Cloud configs...')))
             RefreshCloudConfigList()
         else
-            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Switching to Local configs...')))
             local localList = {}
 
+            -- Format: [index] ConfigName
             for i = 1, #db.db.configs['Local'] do
                 local cfg = db.db.configs['Local'][i]
                 local cfgName = type(cfg) == 'table' and (cfg[1] or 'Unnamed') or tostring(cfg)
                 table.insert(localList, string.format('[%d] %s', i, cfgName))
             end
 
+            -- Update the List UI for Local mode
             Menu.Home.ConfigSystem.List:update(localList)
-
-            utils.printc(pui.format(string.format('\f<z>[\f<orion>Orion Solutions\f<z>] \f<z>Loaded \f<orion>%d \f<z>Local Configs:', #localList)))
         end
 
+       -- Reset selection text
         Menu.Home.ConfigSystem.Selected:set('Selected - \vNone')
     end)
 end
